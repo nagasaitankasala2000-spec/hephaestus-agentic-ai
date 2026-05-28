@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HEPHAESTUS — Command Center</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  :root {
+    --bg:       #0a0e1a;
+    --surface:  #111827;
+    --surface2: #1a2235;
+    --border:   #1e2d45;
+    --teal:     #1D9E75;
+    --teal-dim: #0f4f3a;
+    --amber:    #EF9F27;
+    --amber-dim:#5a3d0a;
+    --blue:     #378ADD;
+    --blue-dim: #0d2d4a;
+    --red:      #E24B4A;
+    --red-dim:  #4a1212;
+    --text:     #e2e8f0;
+    --muted:    #64748b;
+    --success:  #1D9E75;
+    --warning:  #EF9F27;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'SF Mono', 'Fira Code', monospace; font-size: 13px; }
+
+  /* TOP BAR */
+  .topbar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 24px; height: 52px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+  .topbar-left { display: flex; align-items: center; gap: 16px; }
+  .logo { font-size: 15px; font-weight: 700; color: var(--teal); letter-spacing: 0.1em; }
+  .logo span { color: var(--muted); font-weight: 400; font-size: 11px; margin-left: 8px; }
+  .session-badge { font-size: 11px; color: var(--muted); background: var(--surface2); padding: 3px 10px; border-radius: 4px; border: 1px solid var(--border); }
+  .sys-status { font-size: 11px; padding: 4px 12px; border-radius: 4px; font-weight: 600; }
+  .status-ok   { background: var(--teal-dim);  color: var(--teal);  border: 1px solid var(--teal); }
+  .status-warn { background: var(--amber-dim); color: var(--amber); border: 1px solid var(--amber); }
+  .status-err  { background: var(--red-dim);   color: var(--red);   border: 1px solid var(--red); }
+
+  /* LAYOUT */
+  .main { padding: 20px 24px; max-width: 1400px; margin: 0 auto; }
+
+  /* METRIC STRIP */
+  .metrics { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 20px; }
+  .metric { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; }
+  .metric-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+  .metric-value { font-size: 22px; font-weight: 700; color: var(--text); }
+  .metric-sub   { font-size: 10px; color: var(--teal); margin-top: 3px; }
+
+  /* AGENT CARDS */
+  .agents { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px; }
+  .agent-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .agent-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .agent-name-row { display: flex; align-items: center; gap: 8px; }
+  .agent-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .dot-teal  { background: var(--teal);  box-shadow: 0 0 6px var(--teal); }
+  .dot-amber { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
+  .dot-blue  { background: var(--blue);  box-shadow: 0 0 6px var(--blue); }
+  .agent-name { font-size: 13px; font-weight: 700; }
+  .agent-status-pill { font-size: 10px; padding: 2px 8px; border-radius: 3px; font-weight: 600; }
+  .pill-idle     { background: #1e2d45; color: var(--muted); }
+  .pill-thinking { background: var(--amber-dim); color: var(--amber); }
+  .pill-complete { background: var(--teal-dim);  color: var(--teal); }
+  .pill-waiting  { background: var(--blue-dim);  color: var(--blue); }
+  .agent-stat { font-size: 12px; color: var(--muted); line-height: 2; }
+  .agent-stat span { color: var(--text); }
+  .agent-btn { width: 100%; margin-top: 12px; padding: 8px; background: transparent; border: 1px solid var(--border); color: var(--text); border-radius: 6px; cursor: pointer; font-family: inherit; font-size: 12px; transition: all 0.2s; }
+  .agent-btn:hover { background: var(--surface2); border-color: var(--teal); color: var(--teal); }
+  .btn-teal  { border-color: var(--teal-dim);  }
+  .btn-amber { border-color: var(--amber-dim); }
+  .btn-blue  { border-color: var(--blue-dim);  }
+
+  /* MAIN GRID */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .panel-title { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 14px; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+
+  /* TABLES */
+  .data-table { width: 100%; border-collapse: collapse; }
+  .data-table th { font-size: 10px; color: var(--muted); text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); text-transform: uppercase; }
+  .data-table td { padding: 7px 8px; font-size: 11px; border-bottom: 1px solid #0d1525; color: var(--text); vertical-align: middle; }
+  .data-table tr:last-child td { border-bottom: none; }
+  .data-table tr:hover td { background: var(--surface2); }
+  .tag { font-size: 10px; padding: 2px 7px; border-radius: 3px; font-weight: 600; display: inline-block; }
+  .tag-green  { background: var(--teal-dim);  color: var(--teal); }
+  .tag-amber  { background: var(--amber-dim); color: var(--amber); }
+  .tag-red    { background: var(--red-dim);   color: var(--red); }
+  .tag-blue   { background: var(--blue-dim);  color: var(--blue); }
+  .tag-gray   { background: #1e2d45;          color: var(--muted); }
+
+  /* HEALTH BAR */
+  .hbar-wrap { flex: 1; height: 5px; background: var(--border); border-radius: 3px; overflow: hidden; margin: 0 8px; }
+  .hbar-fill { height: 100%; border-radius: 3px; }
+  .machine-row { display: flex; align-items: center; padding: 6px 0; border-bottom: 1px solid #0d1525; font-size: 11px; }
+  .machine-row:last-child { border-bottom: none; }
+  .m-name { width: 140px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .m-pct  { width: 34px; text-align: right; color: var(--muted); }
+
+  /* AUDIT LOG */
+  .audit-wrap { max-height: 220px; overflow-y: auto; }
+  .audit-row { display: flex; gap: 10px; padding: 6px 0; border-bottom: 1px solid #0d1525; align-items: flex-start; }
+  .audit-row:last-child { border-bottom: none; }
+  .audit-agent { font-size: 10px; font-weight: 700; min-width: 120px; }
+  .audit-action { font-size: 11px; color: var(--muted); flex: 1; }
+  .audit-time { font-size: 10px; color: #334155; min-width: 55px; text-align: right; }
+
+  /* COMPLIANCE CHIPS */
+  .comp-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+  .comp-chip { padding: 7px 10px; border-radius: 6px; font-size: 11px; display: flex; justify-content: space-between; align-items: center; }
+  .comp-pass { background: var(--teal-dim);  border: 1px solid #0f4f3a; }
+  .comp-fail { background: var(--red-dim);   border: 1px solid #4a1212; }
+  .comp-name { color: var(--text); font-weight: 600; }
+  .comp-result-pass { color: var(--teal); font-size: 10px; }
+  .comp-result-fail { color: var(--red);  font-size: 10px; }
+
+  /* BUTTONS */
+  .action-bar { display: flex; gap: 10px; margin-bottom: 20px; }
+  .btn-primary { padding: 10px 20px; background: var(--teal); color: #fff; border: none; border-radius: 6px; cursor: pointer; font-family: inherit; font-size: 12px; font-weight: 700; letter-spacing: 0.05em; transition: opacity 0.2s; }
+  .btn-primary:hover { opacity: 0.85; }
+  .btn-secondary { padding: 10px 20px; background: transparent; color: var(--text); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; font-family: inherit; font-size: 12px; transition: all 0.2s; }
+  .btn-secondary:hover { background: var(--surface2); border-color: var(--muted); }
+  .btn-danger { padding: 10px 20px; background: transparent; color: var(--red); border: 1px solid var(--red-dim); border-radius: 6px; cursor: pointer; font-family: inherit; font-size: 12px; transition: all 0.2s; }
+  .btn-danger:hover { background: var(--red-dim); }
+
+  /* TOAST */
+  .toast { position: fixed; bottom: 24px; right: 24px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 18px; font-size: 12px; color: var(--text); z-index: 999; opacity: 0; transition: opacity 0.3s; pointer-events: none; max-width: 320px; }
+  .toast.show { opacity: 1; }
+  .toast-teal  { border-color: var(--teal);  }
+  .toast-amber { border-color: var(--amber); }
+  .toast-red   { border-color: var(--red);   }
+
+  /* LOADING */
+  .spinner { display: inline-block; width: 10px; height: 10px; border: 2px solid var(--border); border-top-color: var(--teal); border-radius: 50%; animation: spin 0.6s linear infinite; margin-right: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* SCROLLBAR */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="logo">⚙ HEPHAESTUS <span>v0.9 FORGE</span></div>
+    <div class="session-badge" id="session-id">SESSION: —</div>
+    <div class="session-badge" id="clock">—</div>
+  </div>
+  <div id="sys-status" class="sys-status status-ok">● ALL SYSTEMS OPERATIONAL</div>
+</div>
+
+<div class="main">
+
+  <!-- ACTION BAR -->
+  <div class="action-bar">
+    <button class="btn-primary" onclick="runAllAgents()">▶ RUN ALL AGENTS</button>
+    <button class="btn-secondary" onclick="runHermes()">HERMES: Procurement Scan</button>
+    <button class="btn-secondary" onclick="runForge()">FORGE: Rebalance Schedule</button>
+    <button class="btn-secondary" onclick="runThemis()">THEMIS: Compliance Audit</button>
+    <button class="btn-danger" onclick="simulateFailure()">⚠ Simulate Machine Failure</button>
+    <button class="btn-secondary" onclick="resetSystem()" style="margin-left:auto">↺ Reset</button>
+  </div>
+
+  <!-- METRICS -->
+  <div class="metrics">
+    <div class="metric">
+      <div class="metric-label">Procurement Cycle</div>
+      <div class="metric-value">6.7<span style="font-size:13px;font-weight:400"> hrs</span></div>
+      <div class="metric-sub">↓ from 4.2 days</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Cost Savings</div>
+      <div class="metric-value">12.3<span style="font-size:13px;font-weight:400">%</span></div>
+      <div class="metric-sub">↑ vendor optimization</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Schedule Adherence</div>
+      <div class="metric-value">91.4<span style="font-size:13px;font-weight:400">%</span></div>
+      <div class="metric-sub">↑ from 67% baseline</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">POs Executed</div>
+      <div class="metric-value" id="m-orders">0</div>
+      <div class="metric-sub">autonomous</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Audit Entries</div>
+      <div class="metric-value" id="m-audit">0</div>
+      <div class="metric-sub">all reversible</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Uptime</div>
+      <div class="metric-value">99.97<span style="font-size:13px;font-weight:400">%</span></div>
+      <div class="metric-sub">6 months</div>
+    </div>
+  </div>
+
+  <!-- AGENT CARDS -->
+  <div class="agents">
+    <div class="agent-card">
+      <div class="agent-header">
+        <div class="agent-name-row">
+          <div class="agent-dot dot-teal"></div>
+          <div class="agent-name" style="color:var(--teal)">HERMES</div>
+        </div>
+        <span class="agent-status-pill pill-idle" id="hermes-pill">IDLE</span>
+      </div>
+      <div class="agent-stat">Role: <span>Autonomous Procurement</span></div>
+      <div class="agent-stat">Orders raised: <span id="hermes-orders">0</span></div>
+      <div class="agent-stat">Vendors scored: <span>5 active</span></div>
+      <div class="agent-stat">Last action: <span id="hermes-last">—</span></div>
+      <button class="agent-btn btn-teal" onclick="approveOrders()">✓ Approve All Pending Orders</button>
+    </div>
+    <div class="agent-card">
+      <div class="agent-header">
+        <div class="agent-name-row">
+          <div class="agent-dot dot-amber"></div>
+          <div class="agent-name" style="color:var(--amber)">HEPHAESTUS CORE</div>
+        </div>
+        <span class="agent-status-pill pill-idle" id="forge-pill">IDLE</span>
+      </div>
+      <div class="agent-stat">Role: <span>Shop Floor Scheduling</span></div>
+      <div class="agent-stat">Jobs scheduled: <span id="forge-jobs">0</span></div>
+      <div class="agent-stat">Machines online: <span id="forge-machines">5/5</span></div>
+      <div class="agent-stat">Last action: <span id="forge-last">—</span></div>
+      <button class="agent-btn btn-amber" onclick="runForge()">↺ Rebalance Schedule</button>
+    </div>
+    <div class="agent-card">
+      <div class="agent-header">
+        <div class="agent-name-row">
+          <div class="agent-dot dot-blue"></div>
+          <div class="agent-name" style="color:var(--blue)">THEMIS</div>
+        </div>
+        <span class="agent-status-pill pill-idle" id="themis-pill">IDLE</span>
+      </div>
+      <div class="agent-stat">Role: <span>Compliance & Audit</span></div>
+      <div class="agent-stat">Frameworks: <span>7 active</span></div>
+      <div class="agent-stat">Violations: <span id="themis-violations">0</span></div>
+      <div class="agent-stat">Last action: <span id="themis-last">—</span></div>
+      <button class="agent-btn btn-blue" onclick="runThemis()">⚖ Run Compliance Audit</button>
+    </div>
+  </div>
+
+  <!-- ROW 1: Throughput + Machine Health -->
+  <div class="grid-2">
+    <div class="panel">
+      <div class="panel-title">Production Throughput — Last 8 Cycles</div>
+      <div style="position:relative;height:160px;">
+        <canvas id="throughputChart" role="img" aria-label="Throughput trend over 8 cycles">Throughput trending upward.</canvas>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Machine Health Index</div>
+      <div id="machine-list"></div>
+    </div>
+  </div>
+
+  <!-- ROW 2: PO Queue + Compliance + Audit -->
+  <div class="grid-3">
+    <div class="panel">
+      <div class="panel-title">Purchase Order Queue</div>
+      <table class="data-table">
+        <thead><tr><th>Order ID</th><th>Material</th><th>Cost</th><th>Status</th></tr></thead>
+        <tbody id="po-table"></tbody>
+      </table>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Compliance Status</div>
+      <div class="comp-grid" id="compliance-grid"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">THEMIS Audit Trail</div>
+      <div class="audit-wrap" id="audit-log"></div>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API = '';
+
+let chart;
+let state = { throughput: [72,74,76,75,79,82,85,88] };
+
+function showToast(msg, type='teal') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `toast toast-${type} show`;
+  setTimeout(() => t.classList.remove('show'), 3500);
+}
+
+function setPill(id, status) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const map = {
+    'IDLE':            'pill-idle',
+    'THINKING':        'pill-thinking',
+    'COMPLETE':        'pill-complete',
+    'WAITING_APPROVAL':'pill-waiting',
+    'EXECUTING':       'pill-thinking',
+  };
+  el.className = `agent-status-pill ${map[status]||'pill-idle'}`;
+  el.textContent = status;
+}
+
+function updateClock() {
+  document.getElementById('clock').textContent = new Date().toLocaleTimeString('en-GB',{hour12:false});
+}
+
+function renderMachines(machines) {
+  const el = document.getElementById('machine-list');
+  el.innerHTML = machines.map(m => {
+    const h = m.health;
+    const color = h > 70 ? '#1D9E75' : h > 40 ? '#EF9F27' : '#E24B4A';
+    return `<div class="machine-row">
+      <div class="m-name">${m.name}</div>
+      <div class="hbar-wrap"><div class="hbar-fill" style="width:${h}%;background:${color}"></div></div>
+      <div class="m-pct">${h}%</div>
+      <span class="tag" style="margin-left:6px" class="${h>70?'tag-green':h>40?'tag-amber':'tag-red'}"
+        style="background:${h>70?'var(--teal-dim)':h>40?'var(--amber-dim)':'var(--red-dim)'};
+               color:${h>70?'var(--teal)':h>40?'var(--amber)':'var(--red)'}"
+      >${m.status||'OK'}</span>
+    </div>`;
+  }).join('');
+}
+
+function renderPOTable(orders) {
+  const el = document.getElementById('po-table');
+  if (!orders.length) { el.innerHTML = '<tr><td colspan="4" style="color:var(--muted);text-align:center;padding:16px">No orders yet</td></tr>'; return; }
+  el.innerHTML = orders.slice(-6).map(o => {
+    const status = o.status==='APPROVED_AND_EXECUTED'?'EXECUTED':o.status==='PENDING_APPROVAL'?'PENDING':'DONE';
+    const tagClass = status==='EXECUTED'?'tag-green':status==='PENDING'?'tag-amber':'tag-gray';
+    return `<tr>
+      <td style="font-size:10px;color:var(--muted)">${o.order_id}</td>
+      <td>${o.material.substring(0,18)}</td>
+      <td>€${Number(o.estimated_cost).toLocaleString()}</td>
+      <td><span class="tag ${tagClass}">${status}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+function renderCompliance(checks) {
+  const el = document.getElementById('compliance-grid');
+  if (!checks.length) { el.innerHTML = '<div style="color:var(--muted);font-size:11px">Run audit to check compliance</div>'; return; }
+  el.innerHTML = checks.map(c =>
+    `<div class="comp-chip ${c.status==='PASS'?'comp-pass':'comp-fail'}">
+      <span class="comp-name">${c.regulation.replace('_',' ')}</span>
+      <span class="${c.status==='PASS'?'comp-result-pass':'comp-result-fail'}">${c.status} ${c.score.toFixed(2)}</span>
+    </div>`
+  ).join('');
+}
+
+function renderAuditLog(entries) {
+  const el = document.getElementById('audit-log');
+  if (!entries.length) { el.innerHTML = '<div style="color:var(--muted);font-size:11px;padding:8px">No audit entries yet</div>'; return; }
+  const agentColor = { 'HERMES':'var(--teal)', 'HEPHAESTUS_CORE':'var(--amber)', 'THEMIS':'var(--blue)', 'ORCHESTRATOR':'#a78bfa' };
+  el.innerHTML = entries.slice(0,15).map(e => {
+    const time = new Date(e.timestamp).toLocaleTimeString('en-GB',{hour12:false});
+    return `<div class="audit-row">
+      <div class="audit-agent" style="color:${agentColor[e.agent]||'var(--muted)'}">${e.agent}</div>
+      <div class="audit-action">${e.action}</div>
+      <div class="audit-time">${time}</div>
+    </div>`;
+  }).join('');
+}
+
+function updateThroughput(data) {
+  if (!chart) return;
+  chart.data.datasets[0].data = data;
+  chart.update();
+}
+
+function initChart(data) {
+  const ctx = document.getElementById('throughputChart');
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: ['C1','C2','C3','C4','C5','C6','C7','C8'],
+      datasets: [{
+        label: 'Throughput %',
+        data: data,
+        borderColor: '#1D9E75',
+        backgroundColor: 'rgba(29,158,117,0.07)',
+        fill: true,
+        tension: 0.4,
+        pointRadius: 3,
+        pointBackgroundColor: '#1D9E75',
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { min: 60, max: 100, ticks: { color: '#64748b', font:{size:10} }, grid: { color: '#1e2d45' } },
+        x: { ticks: { color: '#64748b', font:{size:10} }, grid: { display: false } }
+      }
+    }
+  });
+}
+
+async function fetchStatus() {
+  try {
+    const r = await fetch(`${API}/api/status`);
+    const d = await r.json();
+    document.getElementById('session-id').textContent = `SESSION: ${d.session_id}`;
+    document.getElementById('m-orders').textContent = d.total_orders;
+    document.getElementById('m-audit').textContent  = d.audit_entries;
+    setPill('hermes-pill', d.hermes_status);
+    setPill('forge-pill',  d.forge_status);
+    setPill('themis-pill', d.themis_status);
+    const online = d.machines.filter(m => m.health > 40).length;
+    document.getElementById('forge-machines').textContent = `${online}/5`;
+    renderMachines(d.machines.map(m => ({...m, status: m.health>70?'OK':m.health>40?'DEGRADED':'CRITICAL'})));
+    if (d.throughput) updateThroughput(d.throughput);
+    const badge = document.getElementById('sys-status');
+    if (d.compliance_violations > 0) {
+      badge.textContent = `⚠ ${d.compliance_violations} COMPLIANCE WARNING(S)`;
+      badge.className = 'sys-status status-warn';
+    } else {
+      badge.textContent = '● ALL SYSTEMS OPERATIONAL';
+      badge.className = 'sys-status status-ok';
+    }
+    // pull orders and audit log
+    fetchOrders();
+    fetchAuditLog();
+  } catch(e) {
+    console.error(e);
+  }
+}
+
+async function fetchOrders() {
+  try {
+    const r = await fetch(`${API}/api/hermes/orders`);
+    const d = await r.json();
+    renderPOTable(d.orders);
+    document.getElementById('hermes-orders').textContent = d.total;
+  } catch(e) {}
+}
+
+async function fetchAuditLog() {
+  try {
+    const r = await fetch(`${API}/api/themis/audit-log?limit=15`);
+    const d = await r.json();
+    renderAuditLog(d.entries);
+    document.getElementById('m-audit').textContent = d.total;
+  } catch(e) {}
+}
+
+async function runHermes() {
+  setPill('hermes-pill', 'THINKING');
+  document.getElementById('hermes-last').textContent = 'Scanning inventory...';
+  try {
+    const r = await fetch(`${API}/api/hermes/run`, {method:'POST'});
+    const d = await r.json();
+    setPill('hermes-pill', d.orders_raised > 0 ? 'WAITING_APPROVAL' : 'COMPLETE');
+    document.getElementById('hermes-orders').textContent = d.orders_raised;
+    document.getElementById('hermes-last').textContent = `${d.orders_raised} PO(s) raised`;
+    showToast(`HERMES: ${d.message}`, 'teal');
+    fetchOrders();
+    fetchAuditLog();
+  } catch(e) { showToast('Connection error — is the API running?', 'red'); }
+}
+
+async function approveOrders() {
+  try {
+    const r = await fetch(`${API}/api/hermes/approve`, {method:'POST'});
+    const d = await r.json();
+    setPill('hermes-pill', 'COMPLETE');
+    document.getElementById('hermes-last').textContent = `${d.approved.length} orders executed`;
+    showToast(`HERMES: ${d.message}`, 'teal');
+    fetchOrders();
+    fetchAuditLog();
+  } catch(e) { showToast('Connection error', 'red'); }
+}
+
+async function runForge() {
+  setPill('forge-pill', 'THINKING');
+  document.getElementById('forge-last').textContent = 'Rebalancing...';
+  try {
+    const r = await fetch(`${API}/api/forge/schedule`, {method:'POST'});
+    const d = await r.json();
+    setPill('forge-pill', 'COMPLETE');
+    document.getElementById('forge-jobs').textContent = d.jobs_scheduled;
+    document.getElementById('forge-last').textContent = `${d.jobs_scheduled} jobs scheduled`;
+    document.getElementById('forge-machines').textContent = `${d.machines_online}/5`;
+    if (d.throughput) updateThroughput(d.throughput);
+    showToast(`FORGE: ${d.jobs_scheduled} jobs scheduled. Machines online: ${d.machines_online}/5`, 'teal');
+    fetchStatus();
+    fetchAuditLog();
+  } catch(e) { showToast('Connection error', 'red'); }
+}
+
+async function runThemis() {
+  setPill('themis-pill', 'THINKING');
+  document.getElementById('themis-last').textContent = 'Auditing...';
+  try {
+    const r = await fetch(`${API}/api/themis/audit`, {method:'POST'});
+    const d = await r.json();
+    setPill('themis-pill', 'COMPLETE');
+    document.getElementById('themis-violations').textContent = d.violations.length;
+    document.getElementById('themis-last').textContent = `${d.overall} — ${d.passed}/${d.total} passed`;
+    renderCompliance(d.checks);
+    showToast(`THEMIS: ${d.overall} — ${d.passed}/${d.total} regulations passed`, d.overall==='CLEAR'?'teal':'amber');
+    fetchAuditLog();
+  } catch(e) { showToast('Connection error', 'red'); }
+}
+
+async function simulateFailure() {
+  try {
+    const r = await fetch(`${API}/api/forge/simulate-failure`, {method:'POST'});
+    const d = await r.json();
+    const badge = document.getElementById('sys-status');
+    badge.textContent = `⚠ MACHINE ALERT: ${d.machine.name}`;
+    badge.className = 'sys-status status-err';
+    showToast(`⚠ ${d.message}`, 'red');
+    fetchStatus();
+    fetchAuditLog();
+    setTimeout(() => {
+      badge.textContent = '● AUTO-REROUTE COMPLETE';
+      badge.className = 'sys-status status-ok';
+    }, 3000);
+  } catch(e) { showToast('Connection error', 'red'); }
+}
+
+async function runAllAgents() {
+  showToast('Orchestrator: Running full HEPHAESTUS cycle...', 'teal');
+  try {
+    const r = await fetch(`${API}/api/orchestrator/run-all`, {method:'POST'});
+    const d = await r.json();
+    showToast('Full cycle complete — all agents executed.', 'teal');
+    fetchStatus();
+  } catch(e) { showToast('Connection error — is the API running?', 'red'); }
+}
+
+async function resetSystem() {
+  try {
+    const r = await fetch(`${API}/api/orchestrator/reset`, {method:'POST'});
+    const d = await r.json();
+    showToast(`System reset. New session: ${d.session_id}`, 'teal');
+    document.getElementById('po-table').innerHTML = '';
+    document.getElementById('compliance-grid').innerHTML = '';
+    document.getElementById('audit-log').innerHTML = '';
+    fetchStatus();
+  } catch(e) { showToast('Connection error', 'red'); }
+}
+
+// INIT
+updateClock();
+setInterval(updateClock, 1000);
+setInterval(fetchStatus, 10000);
+
+fetch('/api/status')
+  .then(r => r.json())
+  .then(d => {
+    initChart(d.throughput || state.throughput);
+    document.getElementById('session-id').textContent = `SESSION: ${d.session_id}`;
+    renderMachines(d.machines.map(m => ({...m, status:'OK'})));
+  })
+  .catch(() => {
+    initChart(state.throughput);
+    renderMachines([
+      {name:'CNC Mill Alpha',   health:91, status:'OK'},
+      {name:'Lathe Unit Bravo', health:78, status:'OK'},
+      {name:'Press Delta',      health:95, status:'OK'},
+      {name:'Weld Station Echo',health:85, status:'OK'},
+      {name:'Assembly Foxtrot', health:62, status:'DEGRADED'},
+    ]);
+  });
+</script>
+</body>
+</html>
