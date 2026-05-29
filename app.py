@@ -424,7 +424,18 @@ async def forge_schedule():
     for m in STATE.machines:
         m["health"] = max(30, m["health"] - random.randint(0, 4))
 
-    available = [m for m in STATE.machines if m["health"] > 40]
+    
+available = [m for m in STATE.machines if m["health"] > 40]
+
+# Safety: if all machines failed, fall back to least-broken machine
+    if not available:
+        available = [max(STATE.machines, key=lambda m: m["health"])]
+        STATE.add_audit(
+            "HEPHAESTUS_CORE", "FALLBACK_MODE",
+            "All machines critical — operating on least-degraded unit",
+            "Production continues at reduced capacity. Maintenance team paged.",
+            compliance="WARNING",
+        )
     new_jobs   = []
 
     for i, product in enumerate(PRODUCTS):
