@@ -9,7 +9,6 @@ __pycache__/
 *.zip
 
 # Data files (download separately)
-data/
 
 # Environment variables
 .env
@@ -17,3 +16,4 @@ data/
 # IDE
 .vscode/
 .idea/
+data/tokenized_access_logs.csv
