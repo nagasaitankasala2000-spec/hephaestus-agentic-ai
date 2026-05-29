@@ -573,5 +573,244 @@ fetch('/api/status')
     ]);
   });
 </script>
+<!-- ════════════════════════════════════════════════════════════════════
+     HEPHAESTUS CHAT WIDGET — Natural Language Query Interface
+     Paste this entire block right before the closing </body> tag
+     ════════════════════════════════════════════════════════════════════ -->
+
+<style>
+  /* Floating button */
+  #heph-chat-button {
+    position: fixed; bottom: 24px; right: 24px;
+    width: 60px; height: 60px; border-radius: 50%;
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: white; border: none; cursor: pointer;
+    box-shadow: 0 8px 24px rgba(16, 185, 129, 0.4);
+    font-size: 24px; z-index: 9999;
+    transition: transform 0.2s, box-shadow 0.2s;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #heph-chat-button:hover {
+    transform: scale(1.1);
+    box-shadow: 0 12px 32px rgba(16, 185, 129, 0.6);
+  }
+
+  /* Chat panel */
+  #heph-chat-panel {
+    position: fixed; bottom: 100px; right: 24px;
+    width: 420px; max-width: calc(100vw - 48px);
+    height: 600px; max-height: calc(100vh - 140px);
+    background: #0f1419; border: 1px solid #2a3441;
+    border-radius: 16px; z-index: 9998;
+    display: none; flex-direction: column;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  }
+  #heph-chat-panel.open { display: flex; }
+
+  /* Header */
+  #heph-chat-header {
+    padding: 16px 20px; background: linear-gradient(135deg, #10b981, #059669);
+    color: white; font-weight: 600; font-size: 16px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  #heph-chat-subtitle { font-size: 11px; opacity: 0.9; font-weight: 400; margin-top: 2px; }
+  #heph-chat-close { background: transparent; border: none; color: white; font-size: 24px; cursor: pointer; padding: 0 4px; }
+
+  /* Messages area */
+  #heph-chat-messages {
+    flex: 1; overflow-y: auto; padding: 16px;
+    background: #0a0e13; color: #e5e7eb; font-size: 14px;
+  }
+  .heph-msg { margin-bottom: 14px; line-height: 1.5; }
+  .heph-msg-user {
+    background: #1e293b; color: white;
+    padding: 10px 14px; border-radius: 12px 12px 2px 12px;
+    margin-left: 40px; max-width: calc(100% - 40px);
+    word-wrap: break-word;
+  }
+  .heph-msg-ai {
+    background: #064e3b; color: #d1fae5;
+    padding: 10px 14px; border-radius: 12px 12px 12px 2px;
+    margin-right: 40px; max-width: calc(100% - 40px);
+    white-space: pre-wrap; word-wrap: break-word;
+  }
+  .heph-msg-meta { font-size: 10px; opacity: 0.6; margin-top: 4px; }
+  .heph-sources {
+    margin-top: 6px; padding-top: 6px;
+    border-top: 1px solid rgba(255,255,255,0.1);
+    font-size: 11px; opacity: 0.75;
+  }
+  .heph-source-item { padding: 2px 0; }
+
+  /* Suggestions */
+  #heph-suggestions { padding: 0 16px 12px; }
+  .heph-suggestion-btn {
+    display: inline-block; margin: 4px 4px 0 0;
+    padding: 6px 10px; font-size: 11px;
+    background: #1e293b; color: #94a3b8;
+    border: 1px solid #334155; border-radius: 12px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .heph-suggestion-btn:hover { background: #334155; color: white; }
+
+  /* Input area */
+  #heph-chat-input-area {
+    padding: 12px 16px; background: #0f1419;
+    border-top: 1px solid #2a3441;
+    display: flex; gap: 8px;
+  }
+  #heph-chat-input {
+    flex: 1; padding: 10px 14px; font-size: 14px;
+    background: #1e293b; color: white;
+    border: 1px solid #334155; border-radius: 8px;
+    outline: none; font-family: inherit;
+  }
+  #heph-chat-input:focus { border-color: #10b981; }
+  #heph-chat-send {
+    padding: 10px 16px; font-size: 14px; font-weight: 600;
+    background: #10b981; color: white;
+    border: none; border-radius: 8px; cursor: pointer;
+    transition: background 0.15s;
+  }
+  #heph-chat-send:hover { background: #059669; }
+  #heph-chat-send:disabled { background: #374151; cursor: not-allowed; }
+
+  /* Typing indicator */
+  .heph-typing { color: #6b7280; font-style: italic; font-size: 13px; }
+</style>
+
+<!-- Floating button -->
+<button id="heph-chat-button" title="Ask HEPHAESTUS anything">💬</button>
+
+<!-- Chat panel -->
+<div id="heph-chat-panel">
+  <div id="heph-chat-header">
+    <div>
+      <div>🤖 Ask HEPHAESTUS</div>
+      <div id="heph-chat-subtitle">Natural language query — powered by RAG</div>
+    </div>
+    <button id="heph-chat-close" title="Close">×</button>
+  </div>
+
+  <div id="heph-chat-messages">
+    <div class="heph-msg">
+      <div class="heph-msg-ai">
+        👋 Hi! I'm THEMIS, the intelligence layer of HEPHAESTUS. Ask me anything about machine health, inventory, procurement, compliance, or production — I'll pull live answers from the system.
+      </div>
+    </div>
+  </div>
+
+  <div id="heph-suggestions">
+    <span class="heph-suggestion-btn" onclick="hephAsk('Which machine is most likely to fail?')">Machine failure risk</span>
+    <span class="heph-suggestion-btn" onclick="hephAsk('What is our biggest supply chain risk?')">Supply chain risk</span>
+    <span class="heph-suggestion-btn" onclick="hephAsk('How many compliance violations do we have?')">Compliance status</span>
+    <span class="heph-suggestion-btn" onclick="hephAsk('What is our current throughput trend?')">Throughput trend</span>
+    <span class="heph-suggestion-btn" onclick="hephAsk('Give me a full status overview')">Status overview</span>
+  </div>
+
+  <div id="heph-chat-input-area">
+    <input id="heph-chat-input" type="text" placeholder="Ask about machines, inventory, compliance..." autocomplete="off" />
+    <button id="heph-chat-send">Send</button>
+  </div>
+</div>
+
+<script>
+  (function() {
+    const btn       = document.getElementById('heph-chat-button');
+    const panel     = document.getElementById('heph-chat-panel');
+    const closeBtn  = document.getElementById('heph-chat-close');
+    const messages  = document.getElementById('heph-chat-messages');
+    const input     = document.getElementById('heph-chat-input');
+    const sendBtn   = document.getElementById('heph-chat-send');
+
+    btn.addEventListener('click', () => {
+      panel.classList.add('open');
+      input.focus();
+    });
+    closeBtn.addEventListener('click', () => panel.classList.remove('open'));
+
+    function addMessage(text, who, meta) {
+      const wrap = document.createElement('div');
+      wrap.className = 'heph-msg';
+      const bubble = document.createElement('div');
+      bubble.className = who === 'user' ? 'heph-msg-user' : 'heph-msg-ai';
+      bubble.textContent = text;
+      wrap.appendChild(bubble);
+      if (meta) {
+        const m = document.createElement('div');
+        m.className = 'heph-msg-meta';
+        m.textContent = meta;
+        wrap.appendChild(m);
+      }
+      messages.appendChild(wrap);
+      messages.scrollTop = messages.scrollHeight;
+      return bubble;
+    }
+
+    function addSources(parent, sources) {
+      if (!sources || sources.length === 0) return;
+      const box = document.createElement('div');
+      box.className = 'heph-sources';
+      box.innerHTML = '<strong>📎 Sources:</strong>';
+      sources.slice(0, 5).forEach(s => {
+        const item = document.createElement('div');
+        item.className = 'heph-source-item';
+        item.textContent = '• ' + s;
+        box.appendChild(item);
+      });
+      parent.appendChild(box);
+    }
+
+    async function ask(question) {
+      if (!question || question.trim().length < 3) return;
+      addMessage(question, 'user');
+      input.value = '';
+      sendBtn.disabled = true;
+
+      const typing = document.createElement('div');
+      typing.className = 'heph-msg heph-typing';
+      typing.textContent = '🤔 THEMIS is thinking...';
+      messages.appendChild(typing);
+      messages.scrollTop = messages.scrollHeight;
+
+      try {
+        const res = await fetch('/api/query', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question: question })
+        });
+        typing.remove();
+        if (!res.ok) {
+          addMessage('⚠️ Error: ' + res.status + ' ' + res.statusText, 'ai');
+          return;
+        }
+        const data = await res.json();
+        const bubble = addMessage(data.answer, 'ai', `Intent: ${data.intent} · Mode: ${data.mode}`);
+        addSources(bubble.parentElement, data.sources);
+      } catch (e) {
+        typing.remove();
+        addMessage('⚠️ Network error. Check your connection and try again.', 'ai');
+      } finally {
+        sendBtn.disabled = false;
+        input.focus();
+      }
+    }
+
+    window.hephAsk = function(q) {
+      panel.classList.add('open');
+      ask(q);
+    };
+
+    sendBtn.addEventListener('click', () => ask(input.value));
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        ask(input.value);
+      }
+    });
+  })();
+</script>
 </body>
 </html>
