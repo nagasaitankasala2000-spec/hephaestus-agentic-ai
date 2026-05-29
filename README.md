@@ -5,14 +5,6 @@
 
 ---
 
-## 🖥️ Live Dashboard
-
-![HEPHAESTUS Dashboard](images/hephaestus_dashboard.png)
-
-*Three agents running simultaneously — HERMES (procurement), HEPHAESTUS CORE (shop floor), and THEMIS (compliance) — with real-time metrics, purchase order queue, machine health index, job schedule, and audit trail.*
-
----
-
 ## 🧠 Concept & Motivation
 
 Every major AI vendor is racing to deploy GenAI horizontally — chatbots, copilots, content generation. The real white space? **AI that doesn't just suggest the next step — but executes it, autonomously, inside a real industrial process, with full auditability.**
@@ -78,8 +70,6 @@ hephaestus/
 │   ├── ThemisAgent             # Compliance & audit agent
 │   └── HephaestusOrchestrator  # Master coordinator
 │
-├── images/
-│   └── hephaestus_dashboard.png
 ├── README.md
 └── requirements.txt
 ```
@@ -90,11 +80,11 @@ hephaestus/
 
 ```bash
 # 1. Clone the repo
-git clone https://github.com/nagasaitankasala2000-spec/hephaestus-agentic-ai.git
+git clone https://github.com/YOUR_USERNAME/hephaestus-agentic-ai.git
 cd hephaestus-agentic-ai
 
 # 2. Install dependencies
-pip install -r requirements.txt
+pip install colorama
 
 # 3. Run the system
 python hephaestus_prototype.py

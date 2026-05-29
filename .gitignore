@@ -1,0 +1,19 @@
+# Mac system files
+.DS_Store
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Archives
+*.zip
+
+# Data files (download separately)
+data/
+
+# Environment variables
+.env
+
+# IDE
+.vscode/
+.idea/

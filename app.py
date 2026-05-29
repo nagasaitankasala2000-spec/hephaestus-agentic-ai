@@ -27,6 +27,7 @@ from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel
 import uvicorn
 import os
+from rag_engine import answer as rag_answer
 
 # Real data loader — loads from /data folder if available
 try:
@@ -242,9 +243,11 @@ app.add_middleware(
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    with open("static/index.html", "r") as f:
-        return f.read()
-
+    for path in ["static/index.html", "index.html"]:
+        if os.path.exists(path):
+            with open(path, "r") as f:
+                return f.read()
+    return "<h1>HEPHAESTUS API running — visit /docs for API explorer</h1>"
 
 # ─────────────────────────────────────────────
 #  SYSTEM STATUS
@@ -594,6 +597,30 @@ async def orchestrator_reset():
 #  STATIC FILES & ENTRY POINT
 # ─────────────────────────────────────────────
 
+# ─────────────────────────────────────────────
+# RAG — NATURAL LANGUAGE QUERY INTERFACE
+# ─────────────────────────────────────────────
+
+class QueryRequest(BaseModel):
+    question: str
+
+@app.post("/api/query")
+async def query_agents(req: QueryRequest):
+    """Ask HEPHAESTUS anything in plain English."""
+    if not req.question or len(req.question.strip()) < 3:
+        raise HTTPException(status_code=400, detail="Question too short.")
+
+    result = await rag_answer(req.question, STATE)
+
+    STATE.add_audit(
+        "THEMIS",
+        "NATURAL_LANGUAGE_QUERY",
+        f"Query: {req.question[:60]}{'...' if len(req.question) > 60 else ''}",
+        f"Intent: {result['intent']} | Mode: {result['mode']} | "
+        f"Sources: {len(result['sources'])} context block(s).",
+    )
+
+    return result
 @app.get("/api/real-data/kpis")
 async def real_data_kpis():
     """Get real supply chain KPIs from DataCo dataset."""
@@ -610,9 +637,10 @@ if os.path.exists("static"):
     app.mount("/static", StaticFiles(directory="static"), name="static")
 
 if __name__ == "__main__":
-    print("\n╔══════════════════════════════════════════════╗")
-    print("║   HEPHAESTUS API SERVER — v1.0              ║")
-    print("║   Dashboard : http://localhost:8000         ║")
-    print("║   API Docs  : http://localhost:8000/docs    ║")
-    print("╚══════════════════════════════════════════════╝\n")
-    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
+    port = int(os.environ.get("PORT", 8000))
+    print(f"\n╔══════════════════════════════════════════════╗")
+    print(f"║ HEPHAESTUS API SERVER — v1.1                ║")
+    print(f"║ Dashboard : http://localhost:{port}             ║")
+    print(f"║ API Docs  : http://localhost:{port}/docs        ║")
+    print(f"╚══════════════════════════════════════════════╝\n")
+    uvicorn.run("app:app", host="0.0.0.0", port=port, reload=False)
