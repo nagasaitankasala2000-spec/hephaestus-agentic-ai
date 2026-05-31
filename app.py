@@ -28,6 +28,7 @@ from pydantic import BaseModel
 import uvicorn
 import os
 from rag_engine import answer as rag_answer
+from simulator.factory import factory
 
 # Real data loader — loads from /data folder if available
 try:
@@ -646,6 +647,27 @@ async def real_data_kpis():
 if os.path.exists("static"):
     app.mount("/static", StaticFiles(directory="static"), name="static")
 
+# ─────────────────────────────────────────────
+# SIMULATOR — TLYB'S Factory background thread
+# ─────────────────────────────────────────────
+
+@app.on_event("startup")
+async def start_factory():
+    """Boot the TLYB'S Gigafactory simulator when the app starts."""
+    factory.start()
+    print(f"\n🏭 TLYB'S Gigafactory simulator started in background thread.")
+
+
+@app.on_event("shutdown")
+async def stop_factory():
+    """Cleanly stop the simulator when the app shuts down."""
+    factory.stop()
+
+
+@app.get("/api/simulator/status")
+async def simulator_status():
+    """Return current state of the TLYB'S factory simulator."""
+    return factory.status()
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
     print(f"\n╔══════════════════════════════════════════════╗")
