@@ -673,8 +673,6 @@ async def stop_factory():
     factory.stop()
 
 
-@app.get("/api/simulator/status")
-
 @app.get("/api/forge/status")
 async def forge_status():
     """Return current state of the FORGE yield prediction agent."""
@@ -736,6 +734,22 @@ async def themis_v2_frameworks():
             ],
         }
     return {"frameworks": enriched}
+
+@app.get("/api/history/{metric}")
+async def history_get(metric: str, last_n: int = 100):
+    """
+    Get time-series data for a metric.
+    Valid metrics: yield, throughput, scrap_saved, equipment_health, compliance_score, forge_evaluated
+    """
+    valid = {"yield", "throughput", "scrap_saved", "equipment_health", "compliance_score", "forge_evaluated"}
+    if metric not in valid:
+        return {"error": f"Invalid metric. Choose from: {sorted(valid)}"}
+    return {
+        "metric": metric,
+        "data": store.get_history(metric, last_n=last_n),
+        "count": len(store.get_history(metric, last_n=last_n)),
+    }
+@app.get("/api/simulator/status")
 async def simulator_status():
     """Return current state of the TLYB'S factory simulator."""
     return factory.status()

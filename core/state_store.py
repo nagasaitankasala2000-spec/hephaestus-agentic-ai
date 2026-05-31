@@ -75,6 +75,16 @@ class StateStore:
         self._framework_scores: dict = {}
         # Finding ID counter
         self._finding_counter = 0
+# ── Time-series history (v2 dashboard) ─────────────────────────
+        # Ring buffers for key metrics. One entry per snapshot tick.
+        # At ~1 snapshot/sim-hour and 24h window, we hold 24 entries.
+        # But we keep a bigger buffer to allow zoom-out views.
+        self._history_yield = deque(maxlen=500)
+        self._history_throughput = deque(maxlen=500)
+        self._history_scrap_saved = deque(maxlen=500)
+        self._history_equipment_health = deque(maxlen=500)
+        self._history_compliance_score = deque(maxlen=500)
+        self._history_forge_evaluated = deque(maxlen=500)
 
         # ── Equipment state (FORGE-owned, future predictive maintenance) ─
         # Keyed by equipment_id → health dict
@@ -167,6 +177,26 @@ class StateStore:
             self._findings_closed.append(target)
         return True
 
+    def snapshot_metrics(self, sim_time_iso: str, snapshot: dict) -> None:
+        """
+        Record a point-in-time snapshot for trend charts.
+        Snapshot can include: yield_pct, throughput_per_hour, scrap_saved_usd,
+        equipment_health_avg, compliance_score_avg, forge_evaluated_total.
+        """
+        with self._lock:
+            ts = sim_time_iso
+            if "yield_pct" in snapshot:
+                self._history_yield.append({"t": ts, "v": snapshot["yield_pct"]})
+            if "throughput_per_hour" in snapshot:
+                self._history_throughput.append({"t": ts, "v": snapshot["throughput_per_hour"]})
+            if "scrap_saved_usd" in snapshot:
+                self._history_scrap_saved.append({"t": ts, "v": snapshot["scrap_saved_usd"]})
+            if "equipment_health_avg" in snapshot:
+                self._history_equipment_health.append({"t": ts, "v": snapshot["equipment_health_avg"]})
+            if "compliance_score_avg" in snapshot:
+                self._history_compliance_score.append({"t": ts, "v": snapshot["compliance_score_avg"]})
+            if "forge_evaluated_total" in snapshot:
+                self._history_forge_evaluated.append({"t": ts, "v": snapshot["forge_evaluated_total"]})
     def update_framework_score(self, framework_id: str, score_data: dict) -> None:
         """Update compliance score for a framework."""
         with self._lock:
@@ -278,6 +308,24 @@ class StateStore:
             items = [f for f in items if f.get("framework") == framework_filter]
         return list(reversed(items))[:limit]
 
+    def get_history(self, metric: str, last_n: int = 100) -> list:
+        """
+        Return time-series data for a given metric.
+        Metric names: yield, throughput, scrap_saved, equipment_health, compliance_score, forge_evaluated
+        """
+        mapping = {
+            "yield":             self._history_yield,
+            "throughput":        self._history_throughput,
+            "scrap_saved":       self._history_scrap_saved,
+            "equipment_health":  self._history_equipment_health,
+            "compliance_score":  self._history_compliance_score,
+            "forge_evaluated":   self._history_forge_evaluated,
+        }
+        with self._lock:
+            buf = mapping.get(metric)
+            if buf is None:
+                return []
+            return list(buf)[-last_n:]
     def get_framework_scores(self) -> dict:
         """Return current compliance scores per framework."""
         with self._lock:

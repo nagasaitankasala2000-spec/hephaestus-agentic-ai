@@ -1,0 +1,1037 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>HEPHAESTUS v2 — TLYB'S Gigafactory Live Operations</title>
+<style>
+:root {
+  --bg-deepest:   #050808;
+  --bg-deep:      #0a0f10;
+  --bg-panel:     #0d1416;
+  --bg-panel-hi:  #131c1f;
+  --border:       #1f3a3a;
+  --border-hi:    #2a5454;
+
+  --neon:         #00ff9c;
+  --neon-dim:     #00c47a;
+  --neon-glow:    rgba(0, 255, 156, 0.55);
+  --neon-soft:    rgba(0, 255, 156, 0.12);
+
+  --warn:         #ffb300;
+  --warn-glow:    rgba(255, 179, 0, 0.45);
+  --crit:         #ff3a3a;
+  --crit-glow:    rgba(255, 58, 58, 0.55);
+  --info:         #4ecdf4;
+
+  --text:         #c8e8d8;
+  --text-dim:     #6c8a80;
+  --text-faint:   #3a5a52;
+
+  --mono: "JetBrains Mono", "Fira Code", "SF Mono", Menlo, Consolas, monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  background: var(--bg-deepest);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-x: hidden;
+}
+
+body::before {
+  content: "";
+  position: fixed; inset: 0;
+  background:
+    repeating-linear-gradient(
+      0deg,
+      transparent 0px,
+      transparent 3px,
+      rgba(0, 255, 156, 0.018) 3px,
+      rgba(0, 255, 156, 0.018) 4px
+    );
+  pointer-events: none;
+  z-index: 1;
+}
+
+.page { position: relative; z-index: 2; padding: 14px 22px 60px; }
+
+/* TOPBAR */
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 10px; margin-bottom: 14px;
+}
+.brand { display: flex; align-items: baseline; gap: 14px; }
+.brand-mark {
+  color: var(--neon);
+  font-size: 18px; font-weight: 700; letter-spacing: 2px;
+  text-shadow: 0 0 14px var(--neon-glow);
+}
+.brand-sub { color: var(--text-dim); font-size: 11px; letter-spacing: 1px; }
+
+.topbar-meta { display: flex; gap: 22px; font-size: 11px; color: var(--text-dim); }
+.meta-cell { display: flex; flex-direction: column; gap: 2px; }
+.meta-label { color: var(--text-faint); letter-spacing: 1px; }
+.meta-value { color: var(--neon); font-weight: 500; }
+
+.agents-bar { display: flex; gap: 16px; align-items: center; }
+.agent-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 9px; border: 1px solid var(--border);
+  font-size: 10px; letter-spacing: 1px;
+  background: var(--bg-panel);
+}
+.agent-pill .dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--neon); box-shadow: 0 0 8px var(--neon-glow);
+  animation: pulse 1.8s infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.4; }
+}
+
+.ascii-logo {
+  color: var(--neon-dim);
+  font-size: 9px;
+  line-height: 1.1;
+  white-space: pre;
+  margin: 8px 0 18px;
+  opacity: 0.85;
+  text-shadow: 0 0 10px var(--neon-soft);
+}
+
+/* HERO */
+.hero {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.metric {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  padding: 12px 14px;
+  position: relative;
+  overflow: hidden;
+}
+.metric::before {
+  content: "";
+  position: absolute; top: 0; left: 0;
+  width: 3px; height: 100%;
+  background: var(--neon);
+  box-shadow: 0 0 12px var(--neon-glow);
+}
+.metric-label {
+  font-size: 10px; color: var(--text-dim);
+  letter-spacing: 1.5px; margin-bottom: 6px;
+}
+.metric-value {
+  color: var(--neon);
+  font-size: 28px; font-weight: 600;
+  letter-spacing: 1px;
+  text-shadow: 0 0 12px var(--neon-glow);
+}
+.metric-foot { font-size: 10px; color: var(--text-faint); margin-top: 4px; }
+
+.gauge-cell { display: flex; align-items: center; gap: 14px; }
+.gauge-cell .gauge-text { display: flex; flex-direction: column; }
+.gauge { width: 80px; height: 80px; flex-shrink: 0; }
+.gauge .track { fill: none; stroke: var(--border); stroke-width: 8; }
+.gauge .needle { fill: none; stroke: var(--neon); stroke-width: 8; stroke-linecap: round; filter: drop-shadow(0 0 6px var(--neon-glow)); transition: stroke-dasharray 0.6s ease; }
+.gauge text { fill: var(--neon); font-family: var(--mono); font-size: 14px; font-weight: 600; }
+
+/* PRODUCTION LINE */
+.line-panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  padding: 12px 14px 18px;
+  margin-bottom: 18px;
+}
+.panel-head {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+.panel-title { color: var(--neon); font-size: 11px; letter-spacing: 2px; font-weight: 600; }
+.panel-sub { color: var(--text-dim); font-size: 10px; letter-spacing: 1px; }
+
+#line-svg { width: 100%; height: auto; display: block; }
+
+.eq-stroke   { stroke: var(--neon); stroke-width: 1.8; fill: none; filter: drop-shadow(0 0 4px var(--neon-soft)); }
+.eq-fill     { fill: rgba(0, 255, 156, 0.06); }
+.eq-detail   { stroke: var(--neon-dim); stroke-width: 1.2; fill: none; }
+.eq-text     { fill: var(--text); font-family: var(--mono); font-size: 11px; letter-spacing: 0.5px; }
+.eq-label    { fill: var(--neon); font-family: var(--mono); font-size: 13px; font-weight: 700; letter-spacing: 1.2px; }
+.eq-stage    { fill: var(--text-dim); font-family: var(--mono); font-size: 10px; letter-spacing: 2px; font-weight: 600; }
+.flow-path   { fill: none; stroke: var(--border-hi); stroke-width: 2; stroke-dasharray: 5 5; }
+.flow-cell   { fill: var(--neon); filter: drop-shadow(0 0 5px var(--neon-glow)); }
+.arrow-head  { fill: var(--neon-dim); }
+
+.eq-degraded .eq-stroke { stroke: var(--warn); filter: drop-shadow(0 0 6px var(--warn-glow)); }
+.eq-degraded .eq-label  { fill: var(--warn); }
+.eq-critical .eq-stroke { stroke: var(--crit); filter: drop-shadow(0 0 8px var(--crit-glow)); animation: alarm 1.1s infinite; }
+.eq-critical .eq-label  { fill: var(--crit); }
+@keyframes alarm {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.55; }
+}
+
+/* TWIN */
+.twin { display: grid; grid-template-columns: 1.1fr 1fr; gap: 14px; margin-bottom: 18px; }
+.panel { background: var(--bg-panel); border: 1px solid var(--border); padding: 12px 14px; }
+
+.feed { max-height: 320px; overflow-y: auto; font-size: 11px; }
+.feed::-webkit-scrollbar { width: 6px; }
+.feed::-webkit-scrollbar-track { background: var(--bg-deep); }
+.feed::-webkit-scrollbar-thumb { background: var(--border-hi); }
+.feed-line {
+  padding: 6px 0; border-bottom: 1px solid var(--border);
+  display: grid; grid-template-columns: 70px 1fr auto; gap: 10px;
+  align-items: center;
+}
+.feed-line:last-child { border-bottom: none; }
+.feed-time { color: var(--text-faint); font-size: 10px; }
+.feed-msg { color: var(--text); }
+.feed-msg .cell-id { color: var(--neon); }
+.feed-msg.flag { color: var(--crit); }
+.feed-msg.flag .cell-id { color: var(--crit); }
+.feed-score { font-size: 10px; padding: 2px 6px; border: 1px solid var(--border); background: var(--bg-panel-hi); color: var(--text-dim); }
+.feed-score.high { color: var(--crit); border-color: var(--crit); }
+
+.eq-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.eq-card { background: var(--bg-panel-hi); border: 1px solid var(--border); padding: 8px 10px; font-size: 11px; }
+.eq-card .name { color: var(--neon); font-weight: 600; letter-spacing: 1px; font-size: 10px; margin-bottom: 4px; }
+.eq-card .type { color: var(--text-dim); font-size: 9px; margin-bottom: 6px; }
+.eq-card .bar-wrap { background: var(--bg-deepest); height: 6px; border: 1px solid var(--border); position: relative; margin-bottom: 4px; }
+.eq-card .bar { height: 100%; background: var(--neon); box-shadow: 0 0 6px var(--neon-glow); transition: width 0.6s ease; }
+.eq-card.warn .bar { background: var(--warn); box-shadow: 0 0 6px var(--warn-glow); }
+.eq-card.crit .bar { background: var(--crit); box-shadow: 0 0 6px var(--crit-glow); }
+.eq-card .footline { display: flex; justify-content: space-between; font-size: 9px; color: var(--text-dim); }
+.eq-card.warn .name { color: var(--warn); }
+.eq-card.crit .name { color: var(--crit); }
+
+.audit-panel { background: var(--bg-panel); border: 1px solid var(--border); padding: 12px 14px; margin-bottom: 18px; }
+.audit-list { max-height: 260px; overflow-y: auto; font-size: 11px; }
+.audit-list::-webkit-scrollbar { width: 6px; }
+.audit-list::-webkit-scrollbar-track { background: var(--bg-deep); }
+.audit-list::-webkit-scrollbar-thumb { background: var(--border-hi); }
+.audit-row { display: grid; grid-template-columns: 70px 80px 1fr; gap: 12px; padding: 5px 0; border-bottom: 1px solid var(--border); }
+.audit-row .a-time { color: var(--text-faint); font-size: 10px; }
+.audit-row .a-agent { color: var(--neon); font-size: 10px; letter-spacing: 1px; }
+.audit-row .a-msg { color: var(--text); font-size: 11px; }
+
+/* FOOTER */
+.terminal-footer {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  background: var(--bg-deepest); border-top: 1px solid var(--border-hi);
+  height: 32px;
+  display: flex; align-items: center;
+  padding: 0 18px;
+  font-size: 11px; color: var(--neon-dim);
+  font-family: var(--mono);
+  overflow: hidden; z-index: 50;
+}
+.term-prompt { color: var(--neon); margin-right: 8px; text-shadow: 0 0 6px var(--neon-glow); }
+#term-stream { color: var(--text); flex: 1; white-space: nowrap; }
+.term-cursor {
+  display: inline-block; width: 6px; height: 13px; vertical-align: text-bottom;
+  background: var(--neon); margin-left: 4px;
+  animation: blink 1s steps(2) infinite;
+  box-shadow: 0 0 6px var(--neon-glow);
+}
+@keyframes blink { 50% { opacity: 0; } }
+
+/* CHAT */
+#heph-chat-button {
+  position: fixed; bottom: 50px; right: 22px;
+  width: 56px; height: 56px;
+  background: var(--bg-deepest);
+  color: var(--neon);
+  border: 1.5px solid var(--neon);
+  font-family: var(--mono); font-size: 22px;
+  cursor: pointer; z-index: 9999;
+  box-shadow: 0 0 16px var(--neon-glow);
+  transition: all 0.2s;
+  display: flex; align-items: center; justify-content: center;
+}
+#heph-chat-button:hover { background: var(--neon-soft); transform: scale(1.05); }
+#heph-chat-panel {
+  position: fixed; bottom: 120px; right: 22px;
+  width: 440px; max-width: calc(100vw - 44px);
+  height: 560px; max-height: calc(100vh - 180px);
+  background: var(--bg-deepest); border: 1px solid var(--neon);
+  box-shadow: 0 0 30px rgba(0, 255, 156, 0.25);
+  z-index: 9998;
+  display: none; flex-direction: column;
+  font-family: var(--mono);
+}
+#heph-chat-panel.open { display: flex; }
+#heph-chat-header {
+  background: var(--bg-panel); border-bottom: 1px solid var(--border-hi);
+  padding: 12px 16px; color: var(--neon);
+  font-size: 12px; letter-spacing: 1.5px;
+  display: flex; justify-content: space-between; align-items: center;
+}
+#heph-chat-subtitle { font-size: 9px; opacity: 0.7; font-weight: normal; margin-top: 2px; letter-spacing: 1px; }
+#heph-chat-close { background: transparent; border: none; color: var(--neon); font-size: 18px; cursor: pointer; }
+#heph-chat-messages { flex: 1; overflow-y: auto; padding: 14px; background: var(--bg-deepest); }
+.heph-msg { margin-bottom: 12px; }
+.heph-msg-user { background: var(--bg-panel-hi); border-left: 2px solid var(--info); padding: 8px 12px; color: var(--text); margin-left: 30px; font-size: 12px; }
+.heph-msg-ai { background: var(--bg-panel); border-left: 2px solid var(--neon); padding: 8px 12px; color: var(--text); margin-right: 30px; font-size: 12px; white-space: pre-wrap; }
+.heph-msg-meta { font-size: 9px; color: var(--text-faint); margin-top: 4px; letter-spacing: 1px; }
+.heph-sources { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border); font-size: 10px; color: var(--text-dim); }
+.heph-source-item { padding: 2px 0; }
+#heph-suggestions { padding: 8px 14px 6px; }
+.heph-suggestion-btn { display: inline-block; margin: 3px 4px 3px 0; padding: 4px 8px; font-family: var(--mono); font-size: 10px; background: var(--bg-panel-hi); color: var(--text-dim); border: 1px solid var(--border); cursor: pointer; letter-spacing: 0.5px; }
+.heph-suggestion-btn:hover { border-color: var(--neon); color: var(--neon); }
+#heph-chat-input-area { display: flex; gap: 6px; padding: 10px 14px; background: var(--bg-panel); border-top: 1px solid var(--border-hi); }
+#heph-chat-input { flex: 1; padding: 8px 10px; background: var(--bg-deepest); color: var(--neon); border: 1px solid var(--border-hi); font-family: var(--mono); font-size: 12px; outline: none; }
+#heph-chat-input:focus { border-color: var(--neon); }
+#heph-chat-send { padding: 8px 14px; background: var(--neon); color: var(--bg-deepest); border: none; font-family: var(--mono); font-size: 11px; font-weight: 700; cursor: pointer; letter-spacing: 1px; }
+.heph-typing { color: var(--text-faint); font-style: italic; font-size: 11px; }
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <div class="topbar">
+    <div class="brand">
+      <span class="brand-mark">HEPHAESTUS</span>
+      <span class="brand-sub">v2.0 · TLYB'S GIGAFACTORY · NEVADA</span>
+    </div>
+    <div class="topbar-meta">
+      <div class="meta-cell"><span class="meta-label">REAL TIME</span><span class="meta-value" id="m-realtime">--:--:--</span></div>
+      <div class="meta-cell"><span class="meta-label">SIM TIME</span><span class="meta-value" id="m-simtime">----/--/-- --:--</span></div>
+      <div class="meta-cell"><span class="meta-label">UPTIME</span><span class="meta-value" id="m-uptime">0s</span></div>
+      <div class="agents-bar">
+        <span class="agent-pill"><span class="dot"></span>SIMULATOR</span>
+        <span class="agent-pill"><span class="dot"></span>FORGE</span>
+        <span class="agent-pill"><span class="dot"></span>THEMIS</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="ascii-logo">██╗  ██╗███████╗██████╗ ██╗  ██╗ █████╗ ███████╗███████╗████████╗██╗   ██╗███████╗
+██║  ██║██╔════╝██╔══██╗██║  ██║██╔══██╗██╔════╝██╔════╝╚══██╔══╝██║   ██║██╔════╝
+███████║█████╗  ██████╔╝███████║███████║█████╗  ███████╗   ██║   ██║   ██║███████╗
+██╔══██║██╔══╝  ██╔═══╝ ██╔══██║██╔══██║██╔══╝  ╚════██║   ██║   ██║   ██║╚════██║
+██║  ██║███████╗██║     ██║  ██║██║  ██║███████╗███████║   ██║   ╚██████╔╝███████║
+╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝╚══════╝   ╚═╝    ╚═════╝ ╚══════╝
+   AGENTIC AI · CONTINUOUS BATTERY CELL YIELD OPTIMIZATION · STATUS: OPERATIONAL</div>
+
+  <div class="hero">
+    <div class="metric">
+      <div class="metric-label">CURRENT YIELD</div>
+      <div class="gauge-cell">
+        <svg class="gauge" viewBox="0 0 100 100">
+          <circle class="track" cx="50" cy="50" r="42"></circle>
+          <circle class="needle" cx="50" cy="50" r="42" id="gauge-needle" stroke-dasharray="0 264" transform="rotate(-90 50 50)"></circle>
+          <text x="50" y="55" text-anchor="middle" id="gauge-text">0%</text>
+        </svg>
+        <div class="gauge-text">
+          <div style="font-size:10px;color:var(--text-faint);letter-spacing:1px;">TARGET ≥ 94%</div>
+          <div style="font-size:11px;color:var(--text-dim);margin-top:6px;">MODEL ACC: <span id="m-model-acc" style="color:var(--neon);">95.18%</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="metric"><div class="metric-label">CELLS SHIPPED</div><div class="metric-value" id="m-shipped">0</div><div class="metric-foot">since session start</div></div>
+    <div class="metric"><div class="metric-label">CELLS IN FLIGHT</div><div class="metric-value" id="m-inflight">0</div><div class="metric-foot">across 9 stages</div></div>
+    <div class="metric"><div class="metric-label">SCRAP SAVED</div><div class="metric-value" id="m-saved">$0</div><div class="metric-foot">via FORGE flags</div></div>
+    <div class="metric"><div class="metric-label">CELLS AT RISK</div><div class="metric-value" id="m-atrisk">0</div><div class="metric-foot"><span id="m-flagrate">0.0%</span> flag rate</div></div>
+  </div>
+
+  <div class="line-panel">
+    <div class="panel-head">
+      <span class="panel-title">[ TLYB'S CELL PRODUCTION LINE · 9 STAGES · 4680 FORMAT ]</span>
+      <span class="panel-sub" id="line-throughput">— cells/hr · — sim-min/tick</span>
+    </div>
+
+    <!--
+      NEW LAYOUT — Three-row snake. Stages placed on the path.
+      Row 1 (Y=130, left→right):  MIXING → COATING → CALENDERING → SLITTING
+      U-turn right
+      Row 2 (Y=320, right→left):  ASSEMBLY → ELECTROLYTE_FILL → FORMATION
+      U-turn left
+      Row 3 (Y=510, left→right):  AGING → GRADING
+      Each machine box: 200px wide × 120px tall — generous, labels fit.
+    -->
+    <svg id="line-svg" viewBox="0 0 1500 660" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+
+      <!-- Flow path. Snake. Cells animate along this. -->
+      <path id="flow-path-el" class="flow-path"
+            d="M 130 130
+               L 1230 130
+               C 1340 130, 1340 320, 1230 320
+               L 220 320
+               C 110 320, 110 510, 220 510
+               L 1230 510" />
+
+      <!-- Arrow heads showing flow direction -->
+      <polygon class="arrow-head" points="700,124 712,130 700,136"></polygon>
+      <polygon class="arrow-head" points="700,314 688,320 700,326"></polygon>
+      <polygon class="arrow-head" points="700,504 712,510 700,516"></polygon>
+
+      <!-- ════════════════════════════════════════════════════════════════
+           ROW 1: STAGES 1 → 4  (MIXING, COATING, CALENDERING, SLITTING)
+           ════════════════════════════════════════════════════════════════ -->
+
+      <!-- STAGE 1: MIXING -->
+      <g id="eq-MIXER-01" transform="translate(40, 60)">
+        <text class="eq-stage" x="100" y="0" text-anchor="middle">STAGE 1</text>
+        <rect class="eq-stroke eq-fill" x="40" y="15" width="120" height="80" rx="6"></rect>
+        <rect class="eq-detail" x="70" y="10" width="60" height="8" rx="3"></rect>
+        <g>
+          <line class="eq-detail" x1="100" y1="30" x2="100" y2="80" stroke-width="1.8"></line>
+          <line class="eq-detail" x1="70" y1="55" x2="130" y2="55" stroke-width="1.8"></line>
+          <line class="eq-detail" x1="78" y1="35" x2="122" y2="75" stroke-width="1.4"></line>
+          <line class="eq-detail" x1="122" y1="35" x2="78" y2="75" stroke-width="1.4"></line>
+          <animateTransform attributeName="transform" type="rotate" from="0 100 55" to="360 100 55" dur="4s" repeatCount="indefinite"/>
+        </g>
+        <text class="eq-label" x="100" y="118" text-anchor="middle">MIXER-01</text>
+        <text class="eq-text" x="100" y="132" text-anchor="middle">SLURRY MIX</text>
+      </g>
+
+      <!-- STAGE 2: COATING -->
+      <g id="eq-COATER-01" transform="translate(280, 60)">
+        <text class="eq-stage" x="100" y="0" text-anchor="middle">STAGE 2</text>
+        <!-- Drying tunnel -->
+        <rect class="eq-stroke eq-fill" x="10" y="50" width="180" height="40" rx="4"></rect>
+        <!-- Slot die from top -->
+        <polygon class="eq-stroke eq-fill" points="80,22 120,22 110,50 90,50"></polygon>
+        <rect class="eq-detail" x="88" y="14" width="24" height="8"></rect>
+        <!-- Backing roller -->
+        <circle class="eq-stroke eq-fill" cx="100" cy="70" r="8"></circle>
+        <!-- Foil web in/out -->
+        <line class="eq-detail" x1="0" y1="70" x2="20" y2="70" stroke-width="1.2"></line>
+        <line class="eq-detail" x1="180" y1="70" x2="200" y2="70" stroke-width="1.2"></line>
+        <!-- Heat lines -->
+        <line class="eq-detail" x1="130" y1="58" x2="180" y2="58" stroke-dasharray="3 3"></line>
+        <line class="eq-detail" x1="130" y1="82" x2="180" y2="82" stroke-dasharray="3 3"></line>
+        <text class="eq-label" x="100" y="118" text-anchor="middle">COATER-01</text>
+        <text class="eq-text" x="100" y="132" text-anchor="middle">COATING</text>
+      </g>
+
+      <!-- STAGE 3: CALENDERING -->
+      <g id="eq-CALENDER-01" transform="translate(540, 60)">
+        <text class="eq-stage" x="100" y="0" text-anchor="middle">STAGE 3</text>
+        <!-- Top roller -->
+        <circle class="eq-stroke eq-fill" cx="100" cy="35" r="22"></circle>
+        <g>
+          <line class="eq-detail" x1="100" y1="15" x2="100" y2="55"></line>
+          <line class="eq-detail" x1="80" y1="35" x2="120" y2="35"></line>
+          <animateTransform attributeName="transform" type="rotate" from="0 100 35" to="360 100 35" dur="2.4s" repeatCount="indefinite"/>
+        </g>
+        <!-- Bottom roller -->
+        <circle class="eq-stroke eq-fill" cx="100" cy="75" r="22"></circle>
+        <g>
+          <line class="eq-detail" x1="100" y1="55" x2="100" y2="95"></line>
+          <line class="eq-detail" x1="80" y1="75" x2="120" y2="75"></line>
+          <animateTransform attributeName="transform" type="rotate" from="0 100 75" to="-360 100 75" dur="2.4s" repeatCount="indefinite"/>
+        </g>
+        <!-- Web through nip -->
+        <line class="eq-detail" x1="0" y1="55" x2="200" y2="55" stroke-width="1.5"></line>
+        <text class="eq-label" x="100" y="118" text-anchor="middle">CALENDER-01</text>
+        <text class="eq-text" x="100" y="132" text-anchor="middle">PRESS · DENSIFY</text>
+      </g>
+
+      <!-- STAGE 4: SLITTING -->
+      <g id="eq-SLITTER-01" transform="translate(800, 60)">
+        <text class="eq-stage" x="100" y="0" text-anchor="middle">STAGE 4</text>
+        <!-- Wide input foil -->
+        <rect class="eq-stroke eq-fill" x="0" y="45" width="50" height="50"></rect>
+        <!-- Blade housing -->
+        <rect class="eq-stroke eq-fill" x="65" y="25" width="60" height="80" rx="4"></rect>
+        <!-- Vertical blades -->
+        <line class="eq-detail" x1="80" y1="28" x2="80" y2="102" stroke-width="1.8"></line>
+        <line class="eq-detail" x1="95" y1="28" x2="95" y2="102" stroke-width="1.8"></line>
+        <line class="eq-detail" x1="110" y1="28" x2="110" y2="102" stroke-width="1.8"></line>
+        <!-- Output strips -->
+        <rect class="eq-stroke eq-fill" x="140" y="48" width="60" height="6"></rect>
+        <rect class="eq-stroke eq-fill" x="140" y="62" width="60" height="6"></rect>
+        <rect class="eq-stroke eq-fill" x="140" y="76" width="60" height="6"></rect>
+        <rect class="eq-stroke eq-fill" x="140" y="90" width="60" height="6"></rect>
+        <text class="eq-label" x="100" y="118" text-anchor="middle">SLITTER-01</text>
+        <text class="eq-text" x="100" y="132" text-anchor="middle">CUT STRIPS</text>
+      </g>
+
+      <!-- ════════════════════════════════════════════════════════════════
+           ROW 2: STAGES 5 → 7  (ASSEMBLY, ELECTROLYTE_FILL, FORMATION)
+           Flow goes RIGHT to LEFT.
+           ════════════════════════════════════════════════════════════════ -->
+
+      <!-- STAGE 5: ASSEMBLY (on RIGHT side after U-turn) -->
+      <g id="eq-WINDER" transform="translate(1080, 250)">
+        <text class="eq-stage" x="100" y="0" text-anchor="middle">STAGE 5</text>
+        <!-- 4680 cell body -->
+        <rect class="eq-stroke eq-fill" x="65" y="25" width="70" height="90" rx="6"></rect>
+        <rect class="eq-detail" x="80" y="18" width="40" height="7" rx="2"></rect>
+        <g>
+          <circle class="eq-detail" cx="100" cy="70" r="20"></circle>
+          <circle class="eq-detail" cx="100" cy="70" r="14"></circle>
+          <circle class="eq-detail" cx="100" cy="70" r="8"></circle>
+          <line class="eq-detail" x1="100" y1="50" x2="100" y2="90" stroke-width="0.8"></line>
+          <animateTransform attributeName="transform" type="rotate" from="0 100 70" to="360 100 70" dur="3.8s" repeatCount="indefinite"/>
+        </g>
+        <line class="eq-detail" x1="70" y1="114" x2="130" y2="114" stroke-width="1.2"></line>
+        <text class="eq-label" x="100" y="138" text-anchor="middle">WINDER-01/02</text>
+        <text class="eq-text" x="100" y="152" text-anchor="middle">4680 ASSEMBLY</text>
+      </g>
+
+      <!-- STAGE 6: ELECTROLYTE FILL (MIDDLE on row 2) -->
+      <g id="eq-FILL-STATION-01" transform="translate(630, 250)">
+        <text class="eq-stage" x="100" y="0" text-anchor="middle">STAGE 6</text>
+        <!-- Vacuum chamber -->
+        <rect class="eq-stroke eq-fill" x="40" y="35" width="120" height="80" rx="4"></rect>
+        <!-- Cell inside -->
+        <rect class="eq-stroke" x="80" y="60" width="32" height="50" rx="3"></rect>
+        <!-- Fill nozzle from top -->
+        <line class="eq-detail" x1="96" y1="14" x2="96" y2="35" stroke-width="2.2"></line>
+        <polygon class="eq-detail" points="91,35 101,35 96,42" fill="var(--neon-dim)" stroke="none"></polygon>
+        <!-- Droplet -->
+        <circle cx="96" cy="52" r="3" fill="var(--neon-dim)"></circle>
+        <!-- Vacuum gauge -->
+        <circle class="eq-detail" cx="138" cy="50" r="9"></circle>
+        <line class="eq-detail" x1="138" y1="50" x2="142" y2="45" stroke-width="1.4"></line>
+        <text class="eq-text" x="138" y="35" text-anchor="middle" style="font-size:8px;">VAC</text>
+        <text class="eq-label" x="100" y="138" text-anchor="middle">FILL-STATION-01</text>
+        <text class="eq-text" x="100" y="152" text-anchor="middle">ELECTROLYTE FILL</text>
+      </g>
+
+      <!-- STAGE 7: FORMATION (LEFT side of row 2, the U-turn point) -->
+      <g id="eq-FORMATION-RACK" transform="translate(150, 240)">
+        <text class="eq-stage" x="125" y="0" text-anchor="middle" style="fill:var(--warn);">STAGE 7 · BOTTLENECK</text>
+        <rect class="eq-stroke eq-fill" x="15" y="15" width="220" height="110" rx="3"></rect>
+        <!-- 4 rows x 10 cols of cells charging -->
+        <g>
+          <rect class="eq-detail" x="25"  y="25" width="14" height="18"></rect>
+          <rect class="eq-detail" x="45"  y="25" width="14" height="18"></rect>
+          <rect class="eq-detail" x="65"  y="25" width="14" height="18"></rect>
+          <rect class="eq-detail" x="85"  y="25" width="14" height="18"></rect>
+          <rect class="eq-detail" x="105" y="25" width="14" height="18"></rect>
+          <rect class="eq-detail" x="125" y="25" width="14" height="18"></rect>
+          <rect class="eq-detail" x="145" y="25" width="14" height="18"></rect>
+          <rect class="eq-detail" x="165" y="25" width="14" height="18"></rect>
+          <rect class="eq-detail" x="185" y="25" width="14" height="18"></rect>
+          <rect class="eq-detail" x="205" y="25" width="14" height="18"></rect>
+
+          <rect class="eq-detail" x="25"  y="48" width="14" height="18"></rect>
+          <rect class="eq-detail" x="45"  y="48" width="14" height="18"></rect>
+          <rect class="eq-detail" x="65"  y="48" width="14" height="18"></rect>
+          <rect class="eq-detail" x="85"  y="48" width="14" height="18"></rect>
+          <rect class="eq-detail" x="105" y="48" width="14" height="18"></rect>
+          <rect class="eq-detail" x="125" y="48" width="14" height="18"></rect>
+          <rect class="eq-detail" x="145" y="48" width="14" height="18"></rect>
+          <rect class="eq-detail" x="165" y="48" width="14" height="18"></rect>
+          <rect class="eq-detail" x="185" y="48" width="14" height="18"></rect>
+          <rect class="eq-detail" x="205" y="48" width="14" height="18"></rect>
+
+          <rect class="eq-detail" x="25"  y="71" width="14" height="18"></rect>
+          <rect class="eq-detail" x="45"  y="71" width="14" height="18"></rect>
+          <rect class="eq-detail" x="65"  y="71" width="14" height="18"></rect>
+          <rect class="eq-detail" x="85"  y="71" width="14" height="18"></rect>
+          <rect class="eq-detail" x="105" y="71" width="14" height="18"></rect>
+          <rect class="eq-detail" x="125" y="71" width="14" height="18"></rect>
+          <rect class="eq-detail" x="145" y="71" width="14" height="18"></rect>
+          <rect class="eq-detail" x="165" y="71" width="14" height="18"></rect>
+          <rect class="eq-detail" x="185" y="71" width="14" height="18"></rect>
+          <rect class="eq-detail" x="205" y="71" width="14" height="18"></rect>
+
+          <rect class="eq-detail" x="25"  y="94" width="14" height="18"></rect>
+          <rect class="eq-detail" x="45"  y="94" width="14" height="18"></rect>
+          <rect class="eq-detail" x="65"  y="94" width="14" height="18"></rect>
+          <rect class="eq-detail" x="85"  y="94" width="14" height="18"></rect>
+          <rect class="eq-detail" x="105" y="94" width="14" height="18"></rect>
+          <rect class="eq-detail" x="125" y="94" width="14" height="18"></rect>
+          <rect class="eq-detail" x="145" y="94" width="14" height="18"></rect>
+          <rect class="eq-detail" x="165" y="94" width="14" height="18"></rect>
+          <rect class="eq-detail" x="185" y="94" width="14" height="18"></rect>
+          <rect class="eq-detail" x="205" y="94" width="14" height="18"></rect>
+        </g>
+        <!-- Lightning bolt -->
+        <polygon points="225,20 218,38 226,38 220,55 232,33 224,33 230,20" fill="var(--neon-dim)" stroke="none"></polygon>
+        <text class="eq-label" x="125" y="148" text-anchor="middle">FORMATION-RACK</text>
+        <text class="eq-text" x="125" y="162" text-anchor="middle">CYCLING · 12-18h · 80MW</text>
+      </g>
+
+      <!-- ════════════════════════════════════════════════════════════════
+           ROW 3: STAGES 8 → 9  (AGING, GRADING)
+           Flow goes LEFT to RIGHT.
+           ════════════════════════════════════════════════════════════════ -->
+
+      <!-- STAGE 8: AGING -->
+      <g id="eq-AGING" transform="translate(280, 440)">
+        <text class="eq-stage" x="100" y="0" text-anchor="middle">STAGE 8</text>
+        <rect class="eq-stroke eq-fill" x="20" y="15" width="160" height="100"></rect>
+        <!-- Shelves -->
+        <line class="eq-detail" x1="20" y1="40" x2="180" y2="40" stroke-width="1.5"></line>
+        <line class="eq-detail" x1="20" y1="65" x2="180" y2="65" stroke-width="1.5"></line>
+        <line class="eq-detail" x1="20" y1="90" x2="180" y2="90" stroke-width="1.5"></line>
+        <!-- Cell trays on shelves -->
+        <rect class="eq-detail" x="30" y="22" width="30" height="14"></rect>
+        <rect class="eq-detail" x="70" y="22" width="30" height="14"></rect>
+        <rect class="eq-detail" x="110" y="22" width="30" height="14"></rect>
+        <rect class="eq-detail" x="150" y="22" width="22" height="14"></rect>
+        <rect class="eq-detail" x="30" y="47" width="30" height="14"></rect>
+        <rect class="eq-detail" x="70" y="47" width="30" height="14"></rect>
+        <rect class="eq-detail" x="110" y="47" width="30" height="14"></rect>
+        <rect class="eq-detail" x="150" y="47" width="22" height="14"></rect>
+        <rect class="eq-detail" x="30" y="72" width="30" height="14"></rect>
+        <rect class="eq-detail" x="70" y="72" width="30" height="14"></rect>
+        <rect class="eq-detail" x="110" y="72" width="30" height="14"></rect>
+        <rect class="eq-detail" x="150" y="72" width="22" height="14"></rect>
+        <rect class="eq-detail" x="30" y="97" width="30" height="14"></rect>
+        <rect class="eq-detail" x="70" y="97" width="30" height="14"></rect>
+        <rect class="eq-detail" x="110" y="97" width="30" height="14"></rect>
+        <rect class="eq-detail" x="150" y="97" width="22" height="14"></rect>
+        <!-- Clock icon -->
+        <circle class="eq-detail" cx="190" cy="125" r="9"></circle>
+        <line class="eq-detail" x1="190" y1="125" x2="190" y2="119"></line>
+        <line class="eq-detail" x1="190" y1="125" x2="195" y2="128"></line>
+        <text class="eq-label" x="100" y="140" text-anchor="middle">AGING</text>
+        <text class="eq-text" x="100" y="154" text-anchor="middle">10-21 DAYS · TEMP CTRL</text>
+      </g>
+
+      <!-- STAGE 9: GRADING -->
+      <g id="eq-GRADER-01" transform="translate(880, 440)">
+        <text class="eq-stage" x="125" y="0" text-anchor="middle">STAGE 9</text>
+        <!-- Test cabinet -->
+        <rect class="eq-stroke eq-fill" x="10" y="15" width="70" height="100" rx="3"></rect>
+        <line class="eq-detail" x1="22" y1="30" x2="68" y2="30"></line>
+        <line class="eq-detail" x1="22" y1="42" x2="68" y2="42"></line>
+        <line class="eq-detail" x1="22" y1="54" x2="68" y2="54"></line>
+        <line class="eq-detail" x1="22" y1="66" x2="68" y2="66"></line>
+        <!-- Cell being tested -->
+        <rect class="eq-detail" x="32" y="80" width="26" height="20" rx="3"></rect>
+        <!-- Sorter chutes -->
+        <line class="eq-detail" x1="80" y1="65" x2="130" y2="30" stroke-width="1.6"></line>
+        <line class="eq-detail" x1="80" y1="65" x2="130" y2="65" stroke-width="1.6"></line>
+        <line class="eq-detail" x1="80" y1="65" x2="130" y2="100" stroke-width="1.6"></line>
+        <!-- Bins -->
+        <rect class="eq-stroke eq-fill" x="130" y="18" width="105" height="22"></rect>
+        <text class="eq-label" x="182" y="33" text-anchor="middle" style="font-size:11px;">A · PREMIUM</text>
+        <rect class="eq-stroke eq-fill" x="130" y="53" width="105" height="22"></rect>
+        <text class="eq-label" x="182" y="68" text-anchor="middle" style="font-size:11px;">B · STANDARD</text>
+        <rect class="eq-stroke eq-fill" x="130" y="88" width="105" height="22"></rect>
+        <text class="eq-label" x="182" y="103" text-anchor="middle" style="font-size:11px;">C · COMMERCIAL</text>
+        <text class="eq-label" x="125" y="140" text-anchor="middle">GRADER-01</text>
+        <text class="eq-text" x="125" y="154" text-anchor="middle">FINAL TEST · BIN</text>
+      </g>
+
+      <!-- Animated cells flow group -->
+      <g id="flow-cells"></g>
+
+    </svg>
+  </div>
+
+  <div class="twin">
+    <div class="panel">
+      <div class="panel-head">
+        <span class="panel-title">[ FORGE LIVE PREDICTION FEED ]</span>
+        <span class="panel-sub" id="forge-stats">— evaluated · — flagged</span>
+      </div>
+      <div class="feed" id="forge-feed">
+        <div class="feed-line">
+          <span class="feed-time">--:--:--</span>
+          <span class="feed-msg">Awaiting first cell exit from COATING stage...</span>
+          <span class="feed-score">--</span>
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-head">
+        <span class="panel-title">[ EQUIPMENT HEALTH ]</span>
+        <span class="panel-sub">9 machines · live telemetry</span>
+      </div>
+      <div class="eq-grid" id="eq-grid"></div>
+    </div>
+  </div>
+
+  <div class="audit-panel">
+    <div class="panel-head">
+      <span class="panel-title">[ THEMIS AUDIT TRAIL ]</span>
+      <span class="panel-sub">Every event · every decision · every prediction</span>
+    </div>
+    <div class="audit-list" id="audit-list">
+      <div class="audit-row">
+        <span class="a-time">--:--:--</span>
+        <span class="a-agent">SYSTEM</span>
+        <span class="a-msg">Audit trail initializing...</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="terminal-footer">
+  <span class="term-prompt">hephaestus@tlybs:~$</span>
+  <span id="term-stream"></span>
+  <span class="term-cursor"></span>
+</div>
+
+<button id="heph-chat-button">&gt;_</button>
+<div id="heph-chat-panel">
+  <div id="heph-chat-header">
+    <div>
+      <div>HEPHAESTUS // THEMIS</div>
+      <div id="heph-chat-subtitle">NATURAL LANGUAGE QUERY · RAG</div>
+    </div>
+    <button id="heph-chat-close">×</button>
+  </div>
+  <div id="heph-chat-messages">
+    <div class="heph-msg">
+      <div class="heph-msg-ai">> THEMIS online. Ask me about machine health, inventory, procurement, compliance, or production.</div>
+    </div>
+  </div>
+  <div id="heph-suggestions">
+    <span class="heph-suggestion-btn" onclick="hephAsk('Which machine is most likely to fail?')">machine_failure_risk</span>
+    <span class="heph-suggestion-btn" onclick="hephAsk('What is our biggest supply chain risk?')">supply_chain_risk</span>
+    <span class="heph-suggestion-btn" onclick="hephAsk('How many compliance violations do we have?')">compliance_status</span>
+    <span class="heph-suggestion-btn" onclick="hephAsk('Give me a full status overview')">status_overview</span>
+  </div>
+  <div id="heph-chat-input-area">
+    <input id="heph-chat-input" type="text" placeholder="> query system..." autocomplete="off" />
+    <button id="heph-chat-send">SEND</button>
+  </div>
+</div>
+
+<script>
+const SESSION_START = Date.now();
+const POLL_INTERVAL_MS = 2500;
+const TERMINAL_LINES_QUEUE = [];
+
+function fmtUptime(ms) {
+  const s = Math.floor(ms / 1000);
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  if (d > 0)  return d + 'd ' + h + 'h ' + m + 'm ' + sec + 's';
+  if (h > 0)  return h + 'h ' + m + 'm ' + sec + 's';
+  if (m > 0)  return m + 'm ' + sec + 's';
+  return sec + 's';
+}
+function pad(n) { return String(n).padStart(2, '0'); }
+
+setInterval(() => {
+  const now = new Date();
+  document.getElementById('m-realtime').textContent = pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
+  document.getElementById('m-uptime').textContent = fmtUptime(Date.now() - SESSION_START);
+}, 1000);
+
+const GAUGE_CIRCUMFERENCE = 2 * Math.PI * 42;
+function setGauge(pct) {
+  if (pct === null || pct === undefined || isNaN(pct)) pct = 0;
+  pct = Math.max(0, Math.min(100, pct));
+  const filled = (pct / 100) * GAUGE_CIRCUMFERENCE;
+  const empty  = GAUGE_CIRCUMFERENCE - filled;
+  document.getElementById('gauge-needle').setAttribute('stroke-dasharray', filled + ' ' + empty);
+  document.getElementById('gauge-text').textContent = pct.toFixed(1) + '%';
+}
+
+const FLOW_CELLS_COUNT = 16;
+function initFlowCells() {
+  const g = document.getElementById('flow-cells');
+  const path = document.getElementById('flow-path-el');
+  if (!path || !g) return;
+  const totalLen = path.getTotalLength();
+  for (let i = 0; i < FLOW_CELLS_COUNT; i++) {
+    const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    c.setAttribute("r", "4");
+    c.setAttribute("class", "flow-cell");
+    g.appendChild(c);
+    animateCell(c, path, totalLen, (i / FLOW_CELLS_COUNT) * totalLen);
+  }
+}
+function animateCell(cell, path, totalLen, startOffset) {
+  let progress = startOffset;
+  const speed = 0.55 + Math.random() * 0.35;
+  function step() {
+    progress += speed;
+    if (progress > totalLen) progress = 0;
+    const p = path.getPointAtLength(progress);
+    cell.setAttribute("cx", p.x);
+    cell.setAttribute("cy", p.y);
+    requestAnimationFrame(step);
+  }
+  step();
+}
+
+let lastSimulator = null;
+let lastForge = null;
+let prevFlagged = 0;
+
+async function pollSimulator() {
+  try {
+    const r = await fetch('/api/simulator/status');
+    if (!r.ok) return;
+    const data = await r.json();
+    lastSimulator = data;
+    updateFromSimulator(data);
+  } catch (e) {}
+}
+async function pollForge() {
+  try {
+    const r = await fetch('/api/forge/status');
+    if (!r.ok) return;
+    const data = await r.json();
+    lastForge = data;
+    updateFromForge(data);
+  } catch (e) {}
+}
+
+function updateFromSimulator(data) {
+  if (data.sim_now) {
+    const dt = new Date(data.sim_now);
+    document.getElementById('m-simtime').textContent =
+      dt.getUTCFullYear() + '/' + pad(dt.getUTCMonth() + 1) + '/' + pad(dt.getUTCDate()) + ' ' + pad(dt.getUTCHours()) + ':' + pad(dt.getUTCMinutes());
+  }
+  document.getElementById('m-shipped').textContent  = (data.cells_shipped || 0).toLocaleString();
+  document.getElementById('m-inflight').textContent = (data.cells_in_flight || 0).toLocaleString();
+  const yieldPct = data.current_yield_pct;
+  if (yieldPct !== null && yieldPct !== undefined) setGauge(yieldPct);
+  document.getElementById('line-throughput').textContent =
+    (data.ticks_run || 0) + ' ticks · ' + (data.cells_completed || 0).toLocaleString() + ' completed · 60 sim-min/tick';
+  if (data.equipment) renderEquipment(data.equipment);
+}
+
+function updateFromForge(data) {
+  document.getElementById('m-atrisk').textContent = (data.cells_flagged_at_risk || 0).toLocaleString();
+  document.getElementById('m-flagrate').textContent = (data.flag_rate_pct || 0).toFixed(1) + '%';
+  document.getElementById('m-saved').textContent = '$' + (data.estimated_savings_usd || 0).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0});
+  document.getElementById('forge-stats').textContent =
+    (data.cells_evaluated || 0).toLocaleString() + ' evaluated · ' + (data.cells_flagged_at_risk || 0).toLocaleString() + ' flagged';
+
+  const flagged = data.cells_flagged_at_risk || 0;
+  if (flagged > prevFlagged) {
+    pushForgeFeedLine({ flag: true, msg: 'Cell flagged at risk · cumulative ' + flagged, score: 'HIGH' });
+    pushTerminal('[FORGE] cell flagged at risk · running total ' + flagged + ' · est. saved $' + (data.estimated_savings_usd || 0).toFixed(0));
+  }
+  if ((data.cells_evaluated || 0) > 0 && Math.random() < 0.4) {
+    pushForgeFeedLine({ flag: false, msg: 'cells_evaluated = ' + (data.cells_evaluated || 0) + ' · running predictions', score: 'OK' });
+  }
+  prevFlagged = flagged;
+}
+
+function pushForgeFeedLine({ flag, msg, score }) {
+  const feed = document.getElementById('forge-feed');
+  if (feed.children.length === 1 && feed.children[0].textContent.includes('Awaiting')) {
+    feed.innerHTML = '';
+  }
+  const now = new Date();
+  const time = pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
+  const line = document.createElement('div');
+  line.className = 'feed-line';
+  line.innerHTML =
+    '<span class="feed-time">' + time + '</span>' +
+    '<span class="feed-msg ' + (flag ? 'flag' : '') + '">' + msg + '</span>' +
+    '<span class="feed-score ' + (score === 'HIGH' ? 'high' : '') + '">' + score + '</span>';
+  feed.insertBefore(line, feed.firstChild);
+  while (feed.children.length > 30) feed.removeChild(feed.lastChild);
+}
+
+function renderEquipment(equipment) {
+  const grid = document.getElementById('eq-grid');
+  grid.innerHTML = '';
+  equipment.forEach(eq => {
+    const health = eq.health_pct || 0;
+    let healthClass = '';
+    if (eq.status === 'CRITICAL') healthClass = 'crit';
+    else if (eq.status === 'DEGRADED') healthClass = 'warn';
+    const card = document.createElement('div');
+    card.className = 'eq-card ' + healthClass;
+    card.innerHTML =
+      '<div class="name">' + eq.equipment_id + '</div>' +
+      '<div class="type">' + eq.equipment_type + ' · ' + eq.stage + '</div>' +
+      '<div class="bar-wrap"><div class="bar" style="width:' + health.toFixed(1) + '%"></div></div>' +
+      '<div class="footline"><span>' + eq.status + '</span><span>' + health.toFixed(1) + '% · ' + (eq.cells_processed || 0).toLocaleString() + ' cells</span></div>';
+    grid.appendChild(card);
+
+    const svgEq = document.getElementById('eq-' + eq.equipment_id);
+    if (svgEq) {
+      svgEq.classList.remove('eq-degraded', 'eq-critical');
+      if (eq.status === 'DEGRADED') svgEq.classList.add('eq-degraded');
+      else if (eq.status === 'CRITICAL') svgEq.classList.add('eq-critical');
+    }
+  });
+
+  const winders = equipment.filter(e => e.equipment_type === 'WINDER');
+  if (winders.length) {
+    const worst = winders.reduce((acc, w) => {
+      if (w.status === 'CRITICAL') return 'CRITICAL';
+      if (acc === 'CRITICAL') return acc;
+      if (w.status === 'DEGRADED') return 'DEGRADED';
+      return acc;
+    }, 'NOMINAL');
+    const svgWinder = document.getElementById('eq-WINDER');
+    if (svgWinder) {
+      svgWinder.classList.remove('eq-degraded', 'eq-critical');
+      if (worst === 'DEGRADED') svgWinder.classList.add('eq-degraded');
+      else if (worst === 'CRITICAL') svgWinder.classList.add('eq-critical');
+    }
+  }
+}
+
+async function pollAudit() {
+  try {
+    const r = await fetch('/api/themis/audit-log?limit=20');
+    if (!r.ok) return;
+    const data = await r.json();
+    if (data && data.audit_log) renderAudit(data.audit_log);
+  } catch (e) {}
+}
+function renderAudit(entries) {
+  const list = document.getElementById('audit-list');
+  list.innerHTML = '';
+  if (!entries.length) {
+    list.innerHTML = '<div class="audit-row"><span class="a-time">--:--:--</span><span class="a-agent">SYSTEM</span><span class="a-msg">Awaiting first events...</span></div>';
+    return;
+  }
+  entries.slice().reverse().forEach(e => {
+    const time = e.timestamp ? (e.timestamp.split('T')[1]?.split('.')[0] || '--:--:--') : '--:--:--';
+    const row = document.createElement('div');
+    row.className = 'audit-row';
+    row.innerHTML =
+      '<span class="a-time">' + time + '</span>' +
+      '<span class="a-agent">' + (e.agent || 'SYSTEM') + '</span>' +
+      '<span class="a-msg">' + (e.action || '') + ' · ' + (e.rationale || e.summary || '') + '</span>';
+    list.appendChild(row);
+  });
+}
+
+const TERM_SEED_MESSAGES = [
+  "loading XGBoost model · features=14 · n_estimators=200",
+  "tlybs.sim tick · advancing 60 sim-min · cells flowing through 9 stages",
+  "FORGE evaluating COATING-exit measurements · model latency 2ms",
+  "THEMIS audit trail intact · compliance frameworks: UN 38.3 · IATF 16949 · ISO 14001",
+  "monitoring equipment health · 9 machines · noise factor scaling with degradation",
+  "yield optimization loop active · target greater-than 94 pct · scrap saved tracked in USD",
+  "event bus throughput nominal · pub/sub routing typed events to subscribed agents",
+  "TLYB'S Gigafactory · 4680 NCM 811 · target 95,000 cells per day at full scale",
+  "FORGE risk threshold = 0.70 · cells above flagged for early scrap",
+  "session uptime nominal · simulator running in background thread"
+];
+function pushTerminal(line) { TERMINAL_LINES_QUEUE.push(line); }
+function termStreamLoop() {
+  const out = document.getElementById('term-stream');
+  let writing = '';
+  let charIdx = 0;
+  let current = '';
+  function pickNext() {
+    if (TERMINAL_LINES_QUEUE.length > 0) writing = TERMINAL_LINES_QUEUE.shift();
+    else writing = TERM_SEED_MESSAGES[Math.floor(Math.random() * TERM_SEED_MESSAGES.length)];
+    charIdx = 0;
+    current = '';
+  }
+  pickNext();
+  setInterval(() => {
+    if (charIdx < writing.length) {
+      current += writing[charIdx];
+      charIdx++;
+      out.textContent = current;
+    } else {
+      setTimeout(pickNext, 1800);
+      charIdx = writing.length + 1;
+    }
+  }, 32);
+}
+
+(function() {
+  const btn      = document.getElementById('heph-chat-button');
+  const panel    = document.getElementById('heph-chat-panel');
+  const closeBtn = document.getElementById('heph-chat-close');
+  const messages = document.getElementById('heph-chat-messages');
+  const input    = document.getElementById('heph-chat-input');
+  const sendBtn  = document.getElementById('heph-chat-send');
+
+  btn.addEventListener('click', () => { panel.classList.add('open'); input.focus(); });
+  closeBtn.addEventListener('click', () => panel.classList.remove('open'));
+
+  function addMessage(text, who, meta) {
+    const wrap = document.createElement('div');
+    wrap.className = 'heph-msg';
+    const bubble = document.createElement('div');
+    bubble.className = who === 'user' ? 'heph-msg-user' : 'heph-msg-ai';
+    bubble.textContent = text;
+    wrap.appendChild(bubble);
+    if (meta) {
+      const m = document.createElement('div');
+      m.className = 'heph-msg-meta';
+      m.textContent = meta;
+      wrap.appendChild(m);
+    }
+    messages.appendChild(wrap);
+    messages.scrollTop = messages.scrollHeight;
+    return bubble;
+  }
+  function addSources(parent, sources) {
+    if (!sources || sources.length === 0) return;
+    const box = document.createElement('div');
+    box.className = 'heph-sources';
+    box.innerHTML = '<strong>SOURCES:</strong>';
+    sources.slice(0, 5).forEach(s => {
+      const item = document.createElement('div');
+      item.className = 'heph-source-item';
+      item.textContent = '· ' + s;
+      box.appendChild(item);
+    });
+    parent.appendChild(box);
+  }
+
+  async function ask(question) {
+    if (!question || question.trim().length < 3) return;
+    addMessage(question, 'user');
+    input.value = '';
+    sendBtn.disabled = true;
+    const typing = document.createElement('div');
+    typing.className = 'heph-msg heph-typing';
+    typing.textContent = '> THEMIS processing...';
+    messages.appendChild(typing);
+    messages.scrollTop = messages.scrollHeight;
+    try {
+      const res = await fetch('/api/query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: question })
+      });
+      typing.remove();
+      if (!res.ok) { addMessage('error: ' + res.status, 'ai'); return; }
+      const data = await res.json();
+      const bubble = addMessage(data.answer, 'ai', 'intent: ' + data.intent + ' · mode: ' + data.mode);
+      addSources(bubble.parentElement, data.sources);
+    } catch (e) {
+      typing.remove();
+      addMessage('network error.', 'ai');
+    } finally {
+      sendBtn.disabled = false;
+      input.focus();
+    }
+  }
+
+  window.hephAsk = function(q) { panel.classList.add('open'); ask(q); };
+  sendBtn.addEventListener('click', () => ask(input.value));
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(input.value); }
+  });
+})();
+
+window.addEventListener('DOMContentLoaded', () => {
+  initFlowCells();
+  pollSimulator();
+  pollForge();
+  pollAudit();
+  setInterval(pollSimulator, POLL_INTERVAL_MS);
+  setInterval(pollForge, POLL_INTERVAL_MS);
+  setInterval(pollAudit, POLL_INTERVAL_MS * 2);
+  termStreamLoop();
+});
+</script>
+
+</body>
+</html>

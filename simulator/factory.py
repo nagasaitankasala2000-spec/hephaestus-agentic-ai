@@ -158,6 +158,9 @@ class Factory:
 # Material batch tracking (v2 HERMES integration)
         self._cells_since_last_batch += 1
         self._maybe_emit_material_batch()
+# ── Snapshot metrics for time-series dashboard (v2) ───────────
+        self._maybe_snapshot_metrics()
+
         # 4. Equipment wear
         self.line.degrade_equipment(sim_hours_elapsed)
 
@@ -314,6 +317,48 @@ class Factory:
             ))
 
         self._cells_since_last_batch = 0
+    
+    def _maybe_snapshot_metrics(self) -> None:
+        """
+        Once per sim-tick (every real second), snapshot key metrics
+        for the dashboard's time-series charts.
+        """
+        # Compute current yield
+        total = self.completed_count + self.scrapped_count
+        yield_pct = (100.0 * self.completed_count / total) if total > 0 else 100.0
+
+        # Compute throughput per hour (cells_completed since last snapshot, then extrapolated)
+        # Simplification: at 1 tick = 1 sim-hour, throughput per hour = cells_completed since last tick
+        throughput = max(0, self.completed_count - getattr(self, "_last_snapshot_completed", 0))
+        self._last_snapshot_completed = self.completed_count
+
+        # Equipment health average
+        if self.line.all_equipment:
+            health_avg = sum(eq.health_pct for eq in self.line.all_equipment) / len(self.line.all_equipment)
+        else:
+            health_avg = 100.0
+
+        # Compliance score average (read from store, written by THEMIS)
+        framework_scores = store.get_framework_scores()
+        if framework_scores:
+            scores = [s.get("score_pct", 100.0) for s in framework_scores.values()]
+            compliance_avg = sum(scores) / len(scores)
+        else:
+            compliance_avg = 100.0
+
+        # FORGE total (read from store yield_metrics)
+        yield_metrics = store.get_yield_metrics()
+        forge_total = yield_metrics.get("model_predictions_total", 0)
+        scrap_saved = yield_metrics.get("scrap_saved_usd", 0.0)
+
+        store.snapshot_metrics(self.sim_now.isoformat(), {
+            "yield_pct": round(yield_pct, 2),
+            "throughput_per_hour": throughput,
+            "scrap_saved_usd": scrap_saved,
+            "equipment_health_avg": round(health_avg, 2),
+            "compliance_score_avg": round(compliance_avg, 2),
+            "forge_evaluated_total": forge_total,
+        })
     def _emit_telemetry(self) -> None:
         """Each active machine publishes a telemetry event."""
         for eq in self.line.all_equipment:
@@ -355,6 +400,15 @@ class Factory:
     # INTROSPECTION (for /api/simulator/status endpoint)
     # ════════════════════════════════════════════════════════════════════
 
+
+    def _compute_cells_per_stage(self) -> dict:
+        """Count cells currently at each stage of the production line."""
+        counts = {}
+        for cell in self.cells_in_flight:
+            stage = cell.current_stage
+            counts[stage] = counts.get(stage, 0) + 1
+        return counts
+
     def status(self) -> dict:
         """Return current factory state for the dashboard / status endpoint."""
         return {
@@ -363,6 +417,7 @@ class Factory:
             "real_started_at": self.start_time.isoformat(),
             "ticks_run": self.ticks_run,
             "cells_in_flight": len(self.cells_in_flight),
+            "cells_per_stage": self._compute_cells_per_stage(),
             "cells_shipped": self.shipped_count,
             "cells_scrapped": self.scrapped_count,
             "cells_completed": self.completed_count,
