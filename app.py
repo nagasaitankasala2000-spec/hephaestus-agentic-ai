@@ -30,6 +30,10 @@ import os
 from rag_engine import answer as rag_answer
 from simulator.factory import factory
 from agents.forge import forge
+from agents.hermes import hermes
+from core.state_store import store
+from core.event_bus import bus
+
 
 # Real data loader — loads from /data folder if available
 try:
@@ -658,6 +662,7 @@ async def start_factory():
     factory.start()
     print(f"\n🏭 TLYB'S Gigafactory simulator started in background thread.")
 print(f"🤖 FORGE agent online — model loaded, monitoring COATING exits.")
+print(f"📦 HERMES procurement agent online — auto-reorder enabled across 17 suppliers.")
 
 
 @app.on_event("shutdown")
@@ -672,6 +677,31 @@ async def stop_factory():
 async def forge_status():
     """Return current state of the FORGE yield prediction agent."""
     return forge.forge_summary()
+@app.get("/api/hermes/v2/status")
+async def hermes_v2_status():
+    """Return current state of the v2 HERMES procurement agent."""
+    return hermes.hermes_summary()
+
+
+@app.get("/api/hermes/v2/purchase-orders")
+async def hermes_v2_purchase_orders(status: str = None, limit: int = 50):
+    """Return purchase orders, optionally filtered by status."""
+    return {
+        "purchase_orders": store.get_purchase_orders(status_filter=status, limit=limit),
+        "summary": store.get_procurement_summary(),
+    }
+
+
+@app.get("/api/hermes/v2/suppliers")
+async def hermes_v2_suppliers():
+    """Return all supplier scorecards."""
+    return {"suppliers": store.get_supplier_scores()}
+
+
+@app.get("/api/hermes/v2/inventory")
+async def hermes_v2_inventory():
+    """Return current material inventory levels."""
+    return {"inventory": store.get_material_inventory()}
 async def simulator_status():
     """Return current state of the TLYB'S factory simulator."""
     return factory.status()

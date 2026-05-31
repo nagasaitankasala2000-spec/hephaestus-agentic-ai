@@ -26,12 +26,15 @@ from events.types import (
     CellLifecycleEvent,
     TelemetryEvent,
     EquipmentHealthEvent,
+    MaterialQualityEvent,
 )
 from simulator.config import (
     SIM_MINUTES_PER_TICK,
     TICK_INTERVAL_SECONDS,
     MAX_CELLS_IN_FLIGHT,
     NEW_CELLS_PER_SIM_HOUR,
+    MATERIALS,
+    SUPPLIERS,
 )
 from simulator.cell import Cell
 from simulator.production_line import ProductionLine
@@ -78,6 +81,23 @@ class Factory:
         # Cell injection rate-keeper
         self._cells_injected_this_hour = 0
         self._current_sim_hour = self.sim_now.hour
+# ── Material tracking (v2 HERMES integration) ─────────────
+        # Counter for batch material events — emits every BATCH_SIZE_CELLS
+        self._cells_since_last_batch = 0
+        # How many cells per material batch event
+        self.BATCH_SIZE_CELLS = 100
+        # Pick a current supplier per material (HERMES can override)
+        self._current_supplier_per_material = {}
+        self._material_lot_counter = 0
+        # Initialize inventory in state store
+        for mat_name, mat_info in MATERIALS.items():
+            # Start with enough inventory for ~500 cells per material
+            initial_qty = mat_info["consumption_per_cell"] * 500
+            store.set_material_inventory(mat_name, initial_qty)
+        # Pick first supplier per material as default
+        for mat_name, supplier_list in SUPPLIERS.items():
+            if supplier_list:
+                self._current_supplier_per_material[mat_name] = supplier_list[0]
 
     # ════════════════════════════════════════════════════════════════════
     # LIFECYCLE
@@ -135,7 +155,9 @@ class Factory:
 
         # 3. Advance every cell in flight
         self._advance_cells()
-
+# Material batch tracking (v2 HERMES integration)
+        self._cells_since_last_batch += 1
+        self._maybe_emit_material_batch()
         # 4. Equipment wear
         self.line.degrade_equipment(sim_hours_elapsed)
 
@@ -247,6 +269,51 @@ class Factory:
     # TELEMETRY EMISSION
     # ════════════════════════════════════════════════════════════════════
 
+    def _maybe_emit_material_batch(self) -> None:
+        """
+        Every BATCH_SIZE_CELLS produced, emit one MaterialQualityEvent
+        per material, representing one lot consumed. Includes realistic
+        supplier-specific quality variance.
+        """
+        if self._cells_since_last_batch < self.BATCH_SIZE_CELLS:
+            return
+
+        import random
+        # Emit one event per material we have supplier data for
+        for mat_name, supplier_list in SUPPLIERS.items():
+            if not supplier_list:
+                continue
+            supplier = self._current_supplier_per_material.get(mat_name, supplier_list[0])
+            self._material_lot_counter += 1
+            lot_id = f"LOT-{self.sim_now.strftime('%Y%m')}-{self._material_lot_counter:05d}"
+
+            # Generate quality measurement based on supplier mean/stddev
+            quality_pct = random.gauss(
+                supplier["quality_mean"],
+                supplier["quality_stddev"],
+            )
+            quality_pct = max(95.0, min(100.0, quality_pct))
+
+            # Draw down inventory (BATCH_SIZE_CELLS worth)
+            consumption_per_cell = MATERIALS[mat_name]["consumption_per_cell"]
+            total_consumed = consumption_per_cell * self.BATCH_SIZE_CELLS
+            new_inventory = store.adjust_material_inventory(mat_name, -total_consumed)
+
+            # Publish the event
+            bus.publish(MaterialQualityEvent(
+                material=mat_name,
+                lot_id=lot_id,
+                supplier=supplier["name"],
+                quality_metrics={
+                    "purity_pct": round(quality_pct, 3),
+                    "consumed_quantity": round(total_consumed, 3),
+                    "remaining_inventory": round(new_inventory, 3),
+                    "cost_per_unit": MATERIALS[mat_name]["cost_per_unit"],
+                    "unit": MATERIALS[mat_name]["unit"],
+                },
+            ))
+
+        self._cells_since_last_batch = 0
     def _emit_telemetry(self) -> None:
         """Each active machine publishes a telemetry event."""
         for eq in self.line.all_equipment:

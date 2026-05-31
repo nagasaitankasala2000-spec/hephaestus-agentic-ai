@@ -129,6 +129,21 @@ SUPPLIERS = {
     "ELECTROLYTE": [
         {"name": "Capchem Tech (CN)",          "quality_mean": 99.6, "quality_stddev": 0.07},
         {"name": "Mitsubishi Chemical (JP)",   "quality_mean": 99.8, "quality_stddev": 0.04},
+    ], 
+    "SEPARATOR_FILM": [
+        {"name": "Asahi Kasei (JP)",           "quality_mean": 99.85, "quality_stddev": 0.05},
+        {"name": "SK IE Technology (KR)",      "quality_mean": 99.7,  "quality_stddev": 0.07},
+        {"name": "Toray Industries (JP)",      "quality_mean": 99.9,  "quality_stddev": 0.04},
+    ],
+    "COPPER_FOIL": [
+        {"name": "Wieland Group (DE)",         "quality_mean": 99.95, "quality_stddev": 0.02},
+        {"name": "Iljin Materials (KR)",       "quality_mean": 99.92, "quality_stddev": 0.03},
+        {"name": "Furukawa Electric (JP)",     "quality_mean": 99.9,  "quality_stddev": 0.03},
+    ],
+    "ALUMINUM_FOIL": [
+        {"name": "Hindalco Industries (IN)",   "quality_mean": 99.8,  "quality_stddev": 0.06},
+        {"name": "UACJ Corporation (JP)",      "quality_mean": 99.88, "quality_stddev": 0.04},
+        {"name": "Granges AB (SE)",            "quality_mean": 99.85, "quality_stddev": 0.05},
     ],
 }
 

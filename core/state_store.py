@@ -58,6 +58,14 @@ class StateStore:
         # ── Supplier scorecards (HERMES-owned) ──────────────────────────
         # Keyed by supplier name → scorecard dict
         self._supplier_scores: dict = {}
+# ── Purchase orders (HERMES-owned, v2) ───────────────────────────
+        # Tracks every PO from PLACED → IN_TRANSIT → RECEIVED → CONSUMED.
+        self._purchase_orders = deque(maxlen=200)
+        # Material inventory levels — running stock per material name.
+        # Updated by simulator (consumption) and HERMES (deliveries).
+        self._material_inventory: dict = {}
+        # Counter for PO IDs
+        self._po_counter = 0
 
         # ── Equipment state (FORGE-owned, future predictive maintenance) ─
         # Keyed by equipment_id → health dict
@@ -113,6 +121,43 @@ class StateStore:
         with self._lock:
             self._yield_metrics["cells_at_risk"].append(cell_info)
 
+    def record_purchase_order(self, po: dict) -> str:
+        """Add a new PO to the queue. Returns assigned PO ID."""
+        with self._lock:
+            self._po_counter += 1
+            po_id = f"PO-{self._po_counter:05d}"
+            po["po_id"] = po_id
+            po["status"] = po.get("status", "PLACED")
+            po["created_at"] = datetime.now().isoformat()
+            self._purchase_orders.append(po)
+        return po_id
+
+    def update_purchase_order(self, po_id: str, updates: dict) -> bool:
+        """Update an existing PO (status, timestamps, actual_quality, etc.)."""
+        with self._lock:
+            for po in self._purchase_orders:
+                if po.get("po_id") == po_id:
+                    po.update(updates)
+                    po["last_updated"] = datetime.now().isoformat()
+                    return True
+        return False
+
+    def adjust_material_inventory(self, material: str, delta: float) -> float:
+        """
+        Increase (positive delta) or decrease (negative delta) material inventory.
+        Returns the new level.
+        """
+        with self._lock:
+            current = self._material_inventory.get(material, 0.0)
+            new_level = max(0.0, current + delta)
+            self._material_inventory[material] = new_level
+            return new_level
+
+    def set_material_inventory(self, material: str, level: float) -> None:
+        """Force-set inventory level for a material (used at boot)."""
+        with self._lock:
+            self._material_inventory[material] = max(0.0, level)
+
     def update_supplier_score(self, supplier: str, scorecard: dict) -> None:
         """Set or update a supplier's scorecard (HERMES-owned)."""
         with self._lock:
@@ -165,6 +210,43 @@ class StateStore:
                 ),
             }
 
+    def get_purchase_orders(self, status_filter: str = None, limit: int = 50) -> list:
+        """
+        Return purchase orders, optionally filtered by status.
+        Newest first.
+        """
+        with self._lock:
+            pos = list(self._purchase_orders)
+        if status_filter:
+            pos = [p for p in pos if p.get("status") == status_filter]
+        return list(reversed(pos))[:limit]
+
+    def get_material_inventory(self) -> dict:
+        """Return snapshot of material inventory levels."""
+        with self._lock:
+            return dict(self._material_inventory)
+
+    def get_procurement_summary(self) -> dict:
+        """Aggregated procurement state — for dashboard / status API."""
+        with self._lock:
+            pos = list(self._purchase_orders)
+            inventory = dict(self._material_inventory)
+
+        by_status = {}
+        total_open_value = 0.0
+        for po in pos:
+            status = po.get("status", "UNKNOWN")
+            by_status[status] = by_status.get(status, 0) + 1
+            if status in ("PLACED", "IN_TRANSIT"):
+                total_open_value += po.get("total_cost_usd", 0.0)
+
+        return {
+            "total_orders": len(pos),
+            "by_status": by_status,
+            "open_order_value_usd": round(total_open_value, 2),
+            "inventory_materials": len(inventory),
+            "inventory_snapshot": inventory,
+        }    
     def get_supplier_scores(self) -> dict:
         with self._lock:
             return dict(self._supplier_scores)
