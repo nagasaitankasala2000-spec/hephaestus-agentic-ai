@@ -29,6 +29,7 @@ import uvicorn
 import os
 from rag_engine import answer as rag_answer
 from simulator.factory import factory
+from agents.forge import forge
 
 # Real data loader — loads from /data folder if available
 try:
@@ -656,6 +657,7 @@ async def start_factory():
     """Boot the TLYB'S Gigafactory simulator when the app starts."""
     factory.start()
     print(f"\n🏭 TLYB'S Gigafactory simulator started in background thread.")
+print(f"🤖 FORGE agent online — model loaded, monitoring COATING exits.")
 
 
 @app.on_event("shutdown")
@@ -665,6 +667,11 @@ async def stop_factory():
 
 
 @app.get("/api/simulator/status")
+
+@app.get("/api/forge/status")
+async def forge_status():
+    """Return current state of the FORGE yield prediction agent."""
+    return forge.forge_summary()
 async def simulator_status():
     """Return current state of the TLYB'S factory simulator."""
     return factory.status()
