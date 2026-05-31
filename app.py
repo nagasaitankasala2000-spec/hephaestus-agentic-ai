@@ -31,6 +31,7 @@ from rag_engine import answer as rag_answer
 from simulator.factory import factory
 from agents.forge import forge
 from agents.hermes import hermes
+from agents.themis import themis
 from core.state_store import store
 from core.event_bus import bus
 
@@ -663,6 +664,7 @@ async def start_factory():
     print(f"\n🏭 TLYB'S Gigafactory simulator started in background thread.")
 print(f"🤖 FORGE agent online — model loaded, monitoring COATING exits.")
 print(f"📦 HERMES procurement agent online — auto-reorder enabled across 17 suppliers.")
+print(f"⚖️  THEMIS compliance agent online — 3 frameworks, 12 rules, auto-resolve enabled.")
 
 
 @app.on_event("shutdown")
@@ -702,6 +704,38 @@ async def hermes_v2_suppliers():
 async def hermes_v2_inventory():
     """Return current material inventory levels."""
     return {"inventory": store.get_material_inventory()}
+
+@app.get("/api/themis/v2/status")
+async def themis_v2_status():
+    """Return current state of v2 THEMIS compliance agent."""
+    return themis.themis_summary()
+
+
+@app.get("/api/themis/v2/findings")
+async def themis_v2_findings(status: str = "OPEN", framework: str = None, limit: int = 50):
+    """Return compliance findings — filterable by status and framework."""
+    return {
+        "findings": store.get_findings(status_filter=status, framework_filter=framework, limit=limit),
+        "summary": store.get_compliance_summary(),
+    }
+
+
+@app.get("/api/themis/v2/frameworks")
+async def themis_v2_frameworks():
+    """Return all 3 frameworks with their current compliance scores."""
+    from compliance.frameworks import FRAMEWORKS, RULES
+    scores = store.get_framework_scores()
+    enriched = {}
+    for fid, meta in FRAMEWORKS.items():
+        enriched[fid] = {
+            **meta,
+            "score": scores.get(fid, {"score_pct": 100.0, "open_findings": 0}),
+            "rules": [
+                {"id": r["id"], "clause": r["clause"], "description": r["description"], "severity": r["severity"]}
+                for r in RULES if r["framework"] == fid
+            ],
+        }
+    return {"frameworks": enriched}
 async def simulator_status():
     """Return current state of the TLYB'S factory simulator."""
     return factory.status()

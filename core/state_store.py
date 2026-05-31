@@ -66,6 +66,15 @@ class StateStore:
         self._material_inventory: dict = {}
         # Counter for PO IDs
         self._po_counter = 0
+# ── Compliance state (THEMIS-owned, v2) ───────────────────────────
+        # Active findings — open compliance issues. Each has id/framework/rule/severity/status.
+        self._findings = deque(maxlen=500)
+        # Historical findings (closed) — for trend analysis.
+        self._findings_closed = deque(maxlen=500)
+        # Framework compliance scores: { framework_id: {score, open_findings, last_updated} }
+        self._framework_scores: dict = {}
+        # Finding ID counter
+        self._finding_counter = 0
 
         # ── Equipment state (FORGE-owned, future predictive maintenance) ─
         # Keyed by equipment_id → health dict
@@ -120,6 +129,49 @@ class StateStore:
         """Add a cell flagged by FORGE as at-risk for QC failure."""
         with self._lock:
             self._yield_metrics["cells_at_risk"].append(cell_info)
+
+    def open_finding(self, finding: dict) -> str:
+        """
+        Record a new compliance finding. Returns assigned finding ID.
+        Required keys: framework, rule_id, severity, summary
+        Optional: details (dict), source_event_id
+        """
+        with self._lock:
+            self._finding_counter += 1
+            finding_id = f"FIND-{self._finding_counter:05d}"
+            finding["finding_id"] = finding_id
+            finding["status"] = "OPEN"
+            finding["opened_at"] = datetime.now().isoformat()
+            self._findings.append(finding)
+        return finding_id
+
+    def close_finding(self, finding_id: str, resolution: str = "auto-resolved") -> bool:
+        """Mark a finding as closed and move it to history."""
+        with self._lock:
+            target = None
+            remaining = []
+            for f in self._findings:
+                if f.get("finding_id") == finding_id and f.get("status") == "OPEN":
+                    target = f
+                else:
+                    remaining.append(f)
+            if target is None:
+                return False
+            target["status"] = "CLOSED"
+            target["closed_at"] = datetime.now().isoformat()
+            target["resolution"] = resolution
+            # Replace deque contents
+            self._findings.clear()
+            for f in remaining:
+                self._findings.append(f)
+            self._findings_closed.append(target)
+        return True
+
+    def update_framework_score(self, framework_id: str, score_data: dict) -> None:
+        """Update compliance score for a framework."""
+        with self._lock:
+            score_data["last_updated"] = datetime.now().isoformat()
+            self._framework_scores[framework_id] = score_data
 
     def record_purchase_order(self, po: dict) -> str:
         """Add a new PO to the queue. Returns assigned PO ID."""
@@ -210,6 +262,49 @@ class StateStore:
                 ),
             }
 
+    def get_findings(self, status_filter: str = "OPEN", framework_filter: str = None, limit: int = 100) -> list:
+        """
+        Return findings. Default returns OPEN ones, newest first.
+        Pass status_filter='ALL' to get all (open + closed) in one list.
+        """
+        with self._lock:
+            if status_filter == "ALL":
+                items = list(self._findings) + list(self._findings_closed)
+            elif status_filter == "CLOSED":
+                items = list(self._findings_closed)
+            else:
+                items = [f for f in self._findings if f.get("status") == "OPEN"]
+        if framework_filter:
+            items = [f for f in items if f.get("framework") == framework_filter]
+        return list(reversed(items))[:limit]
+
+    def get_framework_scores(self) -> dict:
+        """Return current compliance scores per framework."""
+        with self._lock:
+            return dict(self._framework_scores)
+
+    def get_compliance_summary(self) -> dict:
+        """Aggregated compliance state for dashboard."""
+        with self._lock:
+            open_findings = [f for f in self._findings if f.get("status") == "OPEN"]
+            closed_count = len(self._findings_closed)
+            scores = dict(self._framework_scores)
+
+        by_severity = {}
+        by_framework = {}
+        for f in open_findings:
+            sev = f.get("severity", "UNKNOWN")
+            fw = f.get("framework", "UNKNOWN")
+            by_severity[sev] = by_severity.get(sev, 0) + 1
+            by_framework[fw] = by_framework.get(fw, 0) + 1
+
+        return {
+            "open_findings_count": len(open_findings),
+            "closed_findings_count": closed_count,
+            "by_severity": by_severity,
+            "by_framework": by_framework,
+            "framework_scores": scores,
+        }
     def get_purchase_orders(self, status_filter: str = None, limit: int = 50) -> list:
         """
         Return purchase orders, optionally filtered by status.
