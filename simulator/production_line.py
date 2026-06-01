@@ -102,6 +102,11 @@ class ProductionLine:
             return "SHIPPED"
 
         next_stage = STAGES[current_index + 1]
+# Check if the NEXT stage's equipment can accept this cell
+        next_equipment = self.equipment_by_stage.get(next_stage, [])
+        if next_equipment and not any(eq.is_operational() for eq in next_equipment):
+            # All equipment at next stage is FAILED — cell waits in current stage
+            return None
         cell.advance_to(next_stage, sim_now)
         return next_stage
 
@@ -141,7 +146,13 @@ class ProductionLine:
         # 3) Probabilistic scrap check
         base_failure = STAGE_FAILURE_RATES.get(stage, 0.005)
         # Adjusted failure: low quality cells fail more often
-        adjusted_failure = base_failure * (2.0 - cell.quality_score)
+# Adjusted failure: low quality cells fail more often, AND
+        # equipment degradation increases scrap probability
+        equipment_scrap_mult = 1.0
+        if equipment_at_stage:
+            # Use the worst equipment's scrap multiplier
+            equipment_scrap_mult = max(eq.scrap_multiplier() for eq in equipment_at_stage)
+        adjusted_failure = base_failure * (2.0 - cell.quality_score) * equipment_scrap_mult
         if random.random() < adjusted_failure:
             cell.scrap(stage)
             logger.debug(f"Cell {cell.cell_id} SCRAPPED at {stage} "

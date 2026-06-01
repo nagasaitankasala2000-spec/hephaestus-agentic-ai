@@ -86,6 +86,9 @@ class Factory:
         self._cells_since_last_batch = 0
         # How many cells per material batch event
         self.BATCH_SIZE_CELLS = 100
+        # Auto-maintenance schedule (until manual controls exist)
+        self.MAINTENANCE_INTERVAL_TICKS = 120  # 120 ticks = 5 sim-days
+        self._ticks_since_last_maintenance = 0
         # Pick a current supplier per material (HERMES can override)
         self._current_supplier_per_material = {}
         self._material_lot_counter = 0
@@ -158,6 +161,8 @@ class Factory:
 # Material batch tracking (v2 HERMES integration)
         self._cells_since_last_batch += 1
         self._maybe_emit_material_batch()
+# Auto-maintenance every ~5 sim-days (until manual controls exist)
+        self._maybe_perform_maintenance()
 # ── Snapshot metrics for time-series dashboard (v2) ───────────
         self._maybe_snapshot_metrics()
 
@@ -317,7 +322,26 @@ class Factory:
             ))
 
         self._cells_since_last_batch = 0
-    
+
+    def _maybe_perform_maintenance(self) -> None:
+        """
+        Every MAINTENANCE_INTERVAL_TICKS, restore equipment that's degraded.
+        Simulates a maintenance window. Until real control actions exist
+        (Session 10), this keeps the system from grinding to a permanent halt.
+        """
+        self._ticks_since_last_maintenance += 1
+        if self._ticks_since_last_maintenance < self.MAINTENANCE_INTERVAL_TICKS:
+            return
+
+        self._ticks_since_last_maintenance = 0
+        restored = []
+        for eq in self.line.all_equipment:
+            if eq.health_pct < 90.0:
+                eq.perform_maintenance()
+                restored.append(eq.equipment_id)
+
+        if restored:
+            print(f"🔧 [SIM_TIME {self.sim_now.isoformat()}] Auto-maintenance: restored {len(restored)} machines → {restored}")
     def _maybe_snapshot_metrics(self) -> None:
         """
         Once per sim-tick (every real second), snapshot key metrics

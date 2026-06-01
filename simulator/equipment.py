@@ -167,6 +167,42 @@ class Equipment:
     # IMPACT ON CELL PROCESSING
     # ════════════════════════════════════════════════════════════════════
 
+    def is_operational(self) -> bool:
+        """
+        True if the equipment can currently process cells.
+        False if FAILED/OFFLINE — production should halt at this stage.
+        """
+        return (not self.is_offline) and self.status != "CRITICAL"
+
+    def throughput_factor(self) -> float:
+        """
+        Multiplier on production throughput based on health.
+        100% → 1.0 (full speed)
+        NOMINAL → ~1.0
+        DEGRADED → ~0.7
+        CRITICAL → 0.0 (halted)
+        OFFLINE → 0.0
+        """
+        if not self.is_operational():
+            return 0.0
+        # Linear scaling: 100% health → 1.0, 60% (lower edge of DEGRADED) → 0.7
+        return max(0.3, self.health_pct / 100.0)
+
+    def scrap_multiplier(self) -> float:
+        """
+        Multiplier applied to base stage scrap rate.
+        Healthy equipment: 1.0× (normal scrap)
+        Degraded equipment: up to 4× scrap rate
+        Critical equipment: up to 8× scrap rate
+        """
+        if self.health_pct >= 90.0:
+            return 1.0
+        elif self.health_pct >= 60.0:
+            # Linear: 90% → 1.0, 60% → 4.0
+            return 1.0 + (90.0 - self.health_pct) * 0.1
+        else:
+            # Linear: 60% → 4.0, 30% → 8.0
+            return 4.0 + (60.0 - self.health_pct) * 0.133
     def quality_impact_factor(self) -> float:
         """
         How much this equipment hurts cell quality at its current health.
