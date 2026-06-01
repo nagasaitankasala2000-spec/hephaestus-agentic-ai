@@ -622,20 +622,32 @@ class QueryRequest(BaseModel):
     question: str
 
 @app.post("/api/query")
+@app.post("/api/query")
 async def query_agents(req: QueryRequest):
-    """Ask HEPHAESTUS anything in plain English."""
+    """
+    Ask HEPHAESTUS anything in plain English.
+    Routes through Oracle: structured query first, knowledge base fallback.
+    """
     if not req.question or len(req.question.strip()) < 3:
         raise HTTPException(status_code=400, detail="Question too short.")
 
-    result = await rag_answer(req.question, STATE)
+    from agents.oracle import ask as oracle_ask
+    result = oracle_ask(req.question)
 
-    STATE.add_audit(
-        "THEMIS",
-        "NATURAL_LANGUAGE_QUERY",
-        f"Query: {req.question[:60]}{'...' if len(req.question) > 60 else ''}",
-        f"Intent: {result['intent']} | Mode: {result['mode']} | "
-        f"Sources: {len(result['sources'])} context block(s).",
-    )
+    try:
+        decision = {
+            "agent": "ORACLE",
+            "action": "NATURAL_LANGUAGE_QUERY",
+            "rationale": f"Query: {req.question[:60]}{'...' if len(req.question) > 60 else ''}",
+            "details": {
+                "intent": result.get("intent"),
+                "mode": result.get("mode"),
+                "sources_count": len(result.get("sources", [])),
+            },
+        }
+        store.record_audit_entry(decision)
+    except Exception:
+        pass
 
     return result
 @app.get("/api/real-data/kpis")
