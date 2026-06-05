@@ -43,6 +43,7 @@ class BaseEvent:
     """
     event_id: str = field(default_factory=_new_event_id)
     timestamp: str = field(default_factory=_now_iso)
+    sim_now_iso: str = ""   # sim-time (compressed clock) when event was emitted; populated by publisher
     version: int = 1
 
 

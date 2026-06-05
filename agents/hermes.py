@@ -97,10 +97,11 @@ class Hermes(Agent):
         # 2. Track spend
         self._track_spend(event)
 
-        # 3. Advance PO lifecycle (using event timestamp as "now")
+        # 3. Advance PO lifecycle (using sim_now from the event)
         from datetime import datetime
         try:
-            self.state["sim_now"] = datetime.fromisoformat(event.timestamp)
+            sim_iso = getattr(event, "sim_now_iso", "") or event.timestamp
+            self.state["sim_now"] = datetime.fromisoformat(sim_iso)
         except Exception:
             pass
         self._advance_purchase_orders()
@@ -214,18 +215,24 @@ class Hermes(Agent):
         pending for it, place a new PO with the best-scoring supplier.
         """
         if material in self.state["pending_reorder"]:
-            return  # already have an open PO for this material
+            return
 
         if material not in MATERIALS:
             return
 
         inventory = store.get_material_inventory().get(material, 0.0)
-        # Threshold = 30% of "typical stock" (defined as 500 cells worth)
         typical_stock = MATERIALS[material]["consumption_per_cell"] * 500
         threshold = typical_stock * REORDER_THRESHOLD_FRACTION
 
         if inventory >= threshold:
-            return  # plenty of stock, no action
+            return
+
+        supplier = self._pick_best_supplier(material)
+        if supplier is None:
+            return
+
+        self._place_purchase_order(material, supplier)
+        return  # explicit return to prevent fallthrough
 
         # Time to reorder. Pick the best supplier.
         supplier = self._pick_best_supplier(material)

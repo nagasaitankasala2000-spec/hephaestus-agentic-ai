@@ -147,8 +147,7 @@ class Factory:
     def tick(self) -> None:
         """
         Run ONE simulation step. Public so it's testable without threads.
-        """
-        # 1. Advance simulated time
+        """        # 1. Advance simulated time
         sim_minutes_elapsed = SIM_MINUTES_PER_TICK
         self.sim_now += timedelta(minutes=sim_minutes_elapsed)
         sim_hours_elapsed = sim_minutes_elapsed / 60.0
@@ -158,12 +157,15 @@ class Factory:
 
         # 3. Advance every cell in flight
         self._advance_cells()
+
         # Material batch tracking (v2 HERMES integration)
         self._cells_since_last_batch += 1
         self._maybe_emit_material_batch()
-# Auto-maintenance every ~5 sim-days (until manual controls exist)
+
+        # Auto-maintenance every ~5 sim-days (until manual controls exist)
         self._maybe_perform_maintenance()
-# ── Snapshot metrics for time-series dashboard (v2) ───────────
+
+        # Snapshot metrics for time-series dashboard (v2)
         self._maybe_snapshot_metrics()
 
         # 4. Equipment wear
@@ -285,7 +287,6 @@ class Factory:
         """
         if self._cells_since_last_batch < self.BATCH_SIZE_CELLS:
             return
-
         import random
         # Emit one event per material we have supplier data for
         for mat_name, supplier_list in SUPPLIERS.items():
@@ -309,6 +310,7 @@ class Factory:
 
             # Publish the event
             bus.publish(MaterialQualityEvent(
+                sim_now_iso=self.sim_now.isoformat(),
                 material=mat_name,
                 lot_id=lot_id,
                 supplier=supplier["name"],

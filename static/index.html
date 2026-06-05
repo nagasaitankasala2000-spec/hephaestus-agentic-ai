@@ -1652,7 +1652,7 @@ function applyHermesPOs(data) {
       '<td class="eq-status ' + cls + '">' + status + '</td>' +
       '<td>' + (po.supplier || '—') + '</td>' +
       '<td style="color:var(--text-dim);">' + (po.material || '—') + '</td>' +
-      '<td style="color:var(--text-dim);">' + (po.quantity || 0).toLocaleString() + '</td>' +
+      '<td style="color:var(--text-dim);">' + (po.quantity_units || 0).toLocaleString() + '</td>' +
       '<td style="color:var(--neon);">' + fmtMoney(po.total_cost_usd || po.total_value_usd || 0) + '</td>' +
       '<td style="color:var(--text-faint);font-size:10px;">' + created + '</td>';
     tbody.appendChild(tr);
