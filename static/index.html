@@ -345,7 +345,7 @@ body::before {
     <button class="tab" data-tab="operations">▸ OPERATIONS</button>
     <button class="tab" data-tab="production">▸ PRODUCTION</button>
     <button class="tab" data-tab="procurement">▸ PROCUREMENT</button>
-    <button class="tab" disabled style="color:var(--text-faint);cursor:not-allowed;">COMPLIANCE (8B)</button>
+    <button class="tab" data-tab="compliance">▸ COMPLIANCE</button>
     <button class="tab" disabled style="color:var(--text-faint);cursor:not-allowed;">FORGE (8B)</button>
   </div>
 
@@ -778,6 +778,86 @@ body::before {
 
   </div>
 
+  <!-- ═══════════════════════════════════════════════════════════
+       TAB 5: COMPLIANCE
+       =══════════════════════════════════════════════════════════ -->
+  <div class="tab-content" id="tab-compliance">
+
+    <div class="metric-row">
+      <div class="metric"><div class="metric-label">RULES EVALUATED</div><div class="metric-value" id="comp-rules-eval">0</div><div class="metric-foot">lifetime · 12 rules in catalog</div></div>
+      <div class="metric" id="comp-open-card"><div class="metric-label">OPEN FINDINGS</div><div class="metric-value" id="comp-open">0</div><div class="metric-foot">currently active</div></div>
+      <div class="metric"><div class="metric-label">CLOSED FINDINGS</div><div class="metric-value" id="comp-closed">0</div><div class="metric-foot">auto-resolved</div></div>
+      <div class="metric" id="comp-major-card"><div class="metric-label">MAJOR / CRITICAL</div><div class="metric-value" id="comp-major">0</div><div class="metric-foot">severe findings open</div></div>
+      <div class="metric" id="comp-avg-card"><div class="metric-label">AVG SCORE</div><div class="metric-value" id="comp-avg-score">100.0%</div><div class="metric-foot">across 3 frameworks</div></div>
+    </div>
+
+    <div class="chart-grid-2">
+      <div class="chart-box">
+        <div class="panel-head">
+          <span class="panel-title">[ FINDINGS BY SEVERITY ]</span>
+          <span class="panel-sub">all-time distribution</span>
+        </div>
+        <div id="chart-findings-severity" class="chart-render"></div>
+      </div>
+      <div class="chart-box">
+        <div class="panel-head">
+          <span class="panel-title">[ FINDINGS BY FRAMEWORK ]</span>
+          <span class="panel-sub">open findings per framework</span>
+        </div>
+        <div id="chart-findings-framework" class="chart-render"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <span class="panel-title">[ FRAMEWORK DEEP-DIVE ]</span>
+        <span class="panel-sub">3 frameworks · 12 rules</span>
+      </div>
+      <div class="framework-bars" id="comp-frameworks-detail"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <span class="panel-title">[ ALL FINDINGS ]</span>
+        <span class="panel-sub">open first · newest within group</span>
+      </div>
+      <table class="eq-table" id="comp-findings-table">
+        <thead>
+          <tr>
+            <th>FINDING ID</th>
+            <th>FRAMEWORK</th>
+            <th>RULE</th>
+            <th>SEVERITY</th>
+            <th>STATUS</th>
+            <th>OPENED</th>
+            <th>CLOSED</th>
+          </tr>
+        </thead>
+        <tbody id="comp-findings-tbody"><tr class="empty-row"><td colspan="7">No findings yet — all 12 rules clean. Findings appear when rule conditions trigger (e.g., conflict mineral usage, supplier variance, equipment critical).</td></tr></tbody>
+      </table>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <span class="panel-title">[ RULE CATALOG ]</span>
+        <span class="panel-sub">12 rules monitored continuously</span>
+      </div>
+      <table class="eq-table" id="comp-rules-table">
+        <thead>
+          <tr>
+            <th>RULE ID</th>
+            <th>FRAMEWORK</th>
+            <th>CLAUSE</th>
+            <th>SEVERITY</th>
+            <th>DESCRIPTION</th>
+          </tr>
+        </thead>
+        <tbody id="comp-rules-tbody"></tbody>
+      </table>
+    </div>
+
+  </div>
+
 </div>
 
 <!-- ─── TERMINAL FOOTER ─── -->
@@ -868,6 +948,9 @@ document.querySelectorAll('.tab[data-tab]').forEach(btn => {
       } else if (target === 'procurement') {
         Plotly.Plots.resize('chart-spend-by-material');
         Plotly.Plots.resize('chart-po-status');
+      } else if (target === 'compliance') {
+        Plotly.Plots.resize('chart-findings-severity');
+        Plotly.Plots.resize('chart-findings-framework');
       }
     }, 50);
   });
@@ -1551,12 +1634,179 @@ function applyHermesSuppliers(data) {
     qualityCount > 0 ? (qualitySum / qualityCount).toFixed(1) + '%' : '--%';
 }
 
+
+/* ═══════════════════════════════════════════════════════════════
+   COMPLIANCE TAB — THEMIS data
+   ═══════════════════════════════════════════════════════════════ */
+const SEVERITY_COLORS = {
+  "OBSERVATION":   "#4ecdf4",
+  "NEAR_MISS":     "#00c47a",
+  "FINDING":       "#ffb300",
+  "MAJOR_FINDING": "#ff3a3a",
+};
+const SEVERITY_ORDER = ["OBSERVATION", "NEAR_MISS", "FINDING", "MAJOR_FINDING"];
+
+function initComplianceCharts() {
+  Plotly.newPlot('chart-findings-severity', [{
+    type: 'pie',
+    labels: SEVERITY_ORDER,
+    values: [0, 0, 0, 0],
+    marker: { colors: SEVERITY_ORDER.map(s => SEVERITY_COLORS[s]) },
+    textinfo: 'label+value',
+    textfont: { color: '#c8e8d8', size: 10, family: 'JetBrains Mono, monospace' },
+    hole: 0.5,
+  }], { ...PLOT_LAYOUT_BASE, margin: { l: 10, r: 10, t: 10, b: 10 } }, PLOT_CONFIG);
+
+  Plotly.newPlot('chart-findings-framework', [{
+    type: 'bar',
+    x: [], y: [],
+    marker: { color: '#ffb300' },
+  }], { ...PLOT_LAYOUT_BASE,
+    yaxis: { ...PLOT_LAYOUT_BASE.yaxis, title: { text: 'open findings', font: { color: '#6c8a80', size: 10 } } },
+  }, PLOT_CONFIG);
+}
+
+async function pollCompliance() {
+  try {
+    const [statusR, fwR, findingsR] = await Promise.all([
+      fetch('/api/themis/v2/status').then(r => r.ok ? r.json() : null),
+      fetch('/api/themis/v2/frameworks').then(r => r.ok ? r.json() : null),
+      fetch('/api/themis/v2/findings').then(r => r.ok ? r.json() : null),
+    ]);
+    if (statusR) applyThemisStatus(statusR);
+    if (fwR) applyThemisFrameworks(fwR);
+    if (findingsR) applyThemisFindings(findingsR);
+  } catch (e) {}
+}
+
+function applyThemisStatus(data) {
+  document.getElementById('comp-rules-eval').textContent = (data.rules_evaluated || 0).toLocaleString();
+  document.getElementById('comp-open').textContent = (data.currently_open || 0).toLocaleString();
+  document.getElementById('comp-closed').textContent = (data.findings_closed || 0).toLocaleString();
+  const openCard = document.getElementById('comp-open-card');
+  openCard.classList.remove('warn', 'crit');
+  const open = data.currently_open || 0;
+  if (open >= 5) openCard.classList.add('crit');
+  else if (open >= 1) openCard.classList.add('warn');
+}
+
+function applyThemisFrameworks(data) {
+  const fws = data.frameworks || {};
+  const container = document.getElementById('comp-frameworks-detail');
+  container.innerHTML = '';
+
+  let scoreSum = 0, scoreCount = 0;
+
+  Object.entries(fws).forEach(([fid, fw]) => {
+    const score = fw.score?.score_pct ?? 100;
+    const open = fw.score?.open_findings ?? 0;
+    const rulesTotal = fw.score?.rules_total ?? 0;
+    scoreSum += score; scoreCount++;
+    let cls = '';
+    if (score < 80) cls = 'crit';
+    else if (score < 95) cls = 'warn';
+    const div = document.createElement('div');
+    div.className = 'framework ' + cls;
+    div.innerHTML =
+      '<div class="fw-name">' + fw.name + '</div>' +
+      '<div class="fw-full">' + (fw.scope || '') + '</div>' +
+      '<div class="fw-score">' + score.toFixed(1) + '%</div>' +
+      '<div class="fw-bar-wrap"><div class="fw-bar" style="width:' + score + '%"></div></div>' +
+      '<div class="fw-detail">' + open + ' open · ' + rulesTotal + ' rules · ' + (fw.regulator || '') + '</div>';
+    container.appendChild(div);
+  });
+
+  const avg = scoreCount > 0 ? scoreSum / scoreCount : 100;
+  document.getElementById('comp-avg-score').textContent = avg.toFixed(1) + '%';
+  const avgCard = document.getElementById('comp-avg-card');
+  avgCard.classList.remove('warn', 'crit');
+  if (avg < 80) avgCard.classList.add('crit');
+  else if (avg < 95) avgCard.classList.add('warn');
+
+  const tbody = document.getElementById('comp-rules-tbody');
+  tbody.innerHTML = '';
+  Object.entries(fws).forEach(([fid, fw]) => {
+    (fw.rules || []).forEach(rule => {
+      const tr = document.createElement('tr');
+      const sev = rule.severity || 'OBSERVATION';
+      const sevColor = SEVERITY_COLORS[sev] || '#6c8a80';
+      tr.innerHTML =
+        '<td style="color:var(--neon);">' + rule.id + '</td>' +
+        '<td style="color:var(--text-dim);font-size:10px;">' + fw.name + '</td>' +
+        '<td>' + rule.clause + '</td>' +
+        '<td><span style="color:' + sevColor + ';font-weight:600;">' + sev + '</span></td>' +
+        '<td style="color:var(--text-dim);font-size:10px;">' + rule.description + '</td>';
+      tbody.appendChild(tr);
+    });
+  });
+}
+
+function applyThemisFindings(data) {
+  const findings = data.findings || [];
+  const summary = data.summary || {};
+  const bySev = summary.by_severity || {};
+  const byFw = summary.by_framework || {};
+
+  const major = (bySev.FINDING || 0) + (bySev.MAJOR_FINDING || 0);
+  document.getElementById('comp-major').textContent = major;
+  const majorCard = document.getElementById('comp-major-card');
+  majorCard.classList.remove('warn', 'crit');
+  if (major >= 3) majorCard.classList.add('crit');
+  else if (major >= 1) majorCard.classList.add('warn');
+
+  const sevValues = SEVERITY_ORDER.map(s => bySev[s] || 0);
+  Plotly.restyle('chart-findings-severity', { values: [sevValues] });
+
+  const fwNames = Object.keys(byFw);
+  const fwCounts = fwNames.map(n => byFw[n]);
+  Plotly.restyle('chart-findings-framework', { x: [fwNames], y: [fwCounts] });
+
+  const tbody = document.getElementById('comp-findings-tbody');
+  if (findings.length === 0) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="7">No findings yet — all 12 rules clean. Findings appear when rule conditions trigger (e.g., conflict mineral usage, supplier variance, equipment critical).</td></tr>';
+    return;
+  }
+
+  const sorted = [...findings].sort((a, b) => {
+    const aOpen = a.status === 'OPEN' ? 0 : 1;
+    const bOpen = b.status === 'OPEN' ? 0 : 1;
+    if (aOpen !== bOpen) return aOpen - bOpen;
+    return (b.opened_at || '').localeCompare(a.opened_at || '');
+  });
+
+  tbody.innerHTML = '';
+  sorted.slice(0, 50).forEach(f => {
+    const sev = f.severity || 'OBSERVATION';
+    const sevColor = SEVERITY_COLORS[sev] || '#6c8a80';
+    const status = f.status || '—';
+    let statusCls = '';
+    if (status === 'OPEN') {
+      if (sev === 'MAJOR_FINDING') statusCls = 'crit';
+      else if (sev === 'FINDING') statusCls = 'warn';
+    }
+    const tr = document.createElement('tr');
+    tr.className = statusCls;
+    const opened = (f.opened_at || '').replace('T', ' ').substring(0, 16);
+    const closed = (f.closed_at || '').replace('T', ' ').substring(0, 16) || '—';
+    tr.innerHTML =
+      '<td style="color:var(--neon);font-size:10px;">' + (f.finding_id || '—').substring(0, 16) + '</td>' +
+      '<td style="color:var(--text-dim);font-size:10px;">' + (f.framework || '—') + '</td>' +
+      '<td>' + (f.rule_id || '—') + '<div style="font-size:9px;color:var(--text-faint);">' + (f.clause || '') + '</div></td>' +
+      '<td><span style="color:' + sevColor + ';font-weight:600;">' + sev + '</span></td>' +
+      '<td class="eq-status ' + statusCls + '">' + status + '</td>' +
+      '<td style="color:var(--text-faint);font-size:10px;">' + opened + '</td>' +
+      '<td style="color:var(--text-faint);font-size:10px;">' + closed + '</td>';
+    tbody.appendChild(tr);
+  });
+}
+
 /* ═══════════════════════════════════════════════════════════════
    BOOT
    ═══════════════════════════════════════════════════════════════ */
 window.addEventListener('DOMContentLoaded', () => {
   initCharts();
   initProcurementCharts();
+  initComplianceCharts();
   initFlowCells();
 
   pollSimulator();
@@ -1565,6 +1815,7 @@ window.addEventListener('DOMContentLoaded', () => {
   pollAtRiskCells();
   pollHistory();
   pollProcurement();
+  pollCompliance();
 
   setInterval(pollSimulator, POLL_INTERVAL_MS);
   setInterval(pollForge, POLL_INTERVAL_MS);
@@ -1572,6 +1823,7 @@ window.addEventListener('DOMContentLoaded', () => {
   setInterval(pollAtRiskCells, POLL_INTERVAL_MS * 2);
   setInterval(pollHistory, HISTORY_POLL_INTERVAL_MS);
   setInterval(pollProcurement, POLL_INTERVAL_MS * 2);
+  setInterval(pollCompliance, POLL_INTERVAL_MS * 2);
   termStreamLoop();
 });
 </script>
