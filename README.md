@@ -1,181 +1,74 @@
-# Project HEPHAESTUS 🔥
+# HEPHAESTUS
 
-### Agentic AI for Industrial Enterprise Workflows
+> A multi-agent AI system simulating an EV battery gigafactory. Built as a learning exercise to understand event-driven architecture, multi-agent coordination, ML integration into operational systems, and dashboard development.
 
-> A multi-agent autonomous AI system designed for manufacturing and industrial operations — covering procurement automation, shop floor scheduling, compliance auditing, and a natural-language query interface. Inspired by the gap in enterprise AI: everyone builds horizontal chatbots, nobody builds deep industrial execution intelligence.
-
----
-
-## 🌐 Live Demo
-
-| Resource | Link |
-|----------|------|
-| **🖥️ Live Dashboard** | [hephaestus-agentic-ai-production.up.railway.app](https://hephaestus-agentic-ai-production.up.railway.app) |
-| **📊 API Explorer (Swagger)** | [/docs](https://hephaestus-agentic-ai-production.up.railway.app/docs) |
-| **🤖 Natural Language Query** | `POST /api/query` |
-| **🔍 System Status** | [/api/status](https://hephaestus-agentic-ai-production.up.railway.app/api/status) |
-
-> Deployed on Railway. Backed by real Kaggle manufacturing + supply chain datasets.
+**Live:** [hephaestus-agentic-ai-production.up.railway.app](https://hephaestus-agentic-ai-production.up.railway.app)
+**Author:** Naga Sai Tankasala
+**License:** MIT
 
 ---
 
-## 🖥️ Live Dashboard
+## What it is
 
-![HEPHAESTUS Dashboard](https://github.com/nagasaitankasala2000-spec/hephaestus-agentic-ai/raw/main/images/hephaestus_dashboard.png)
+A synthetic battery gigafactory ("TLYB\'S Gigafactory") with four agents observing and acting on a live simulation:
 
-*Three agents running simultaneously — HERMES (procurement), HEPHAESTUS CORE (shop floor), and THEMIS (compliance) — with real-time metrics, purchase order queue, machine health index, production schedule, and audit trail.*
+- **Simulator** — 9-stage production line (Mixing → Coating → Calendering → Slitting → Assembly → Electrolyte Fill → Formation → Aging → Grading) running on compressed time (1 real second ≈ 1 sim hour). Equipment degrades, materials get consumed, cells move through stages, scrap happens.
+- **FORGE** — XGBoost classifier (200 trees, 14 features, trained on 25,000 synthetic cells: 95.18% accuracy, 0.9214 AUC, 0.8525 recall) that scores each cell exiting the Coating stage and flags cells with failure probability ≥ 0.70 for early scrap.
+- **HERMES** — Procurement agent tracking 17 suppliers across 6 materials (NCM 811 cathode, graphite anode, electrolyte, separator film, copper foil, aluminum foil). Auto-reorders when inventory drops below 30% of typical stock. Tracks per-supplier observed quality and maintains a full PO lifecycle (PLACED → IN_TRANSIT → RECEIVED → CONSUMED).
+- **THEMIS** — Compliance agent monitoring 12 rules across 3 frameworks (UN 38.3 lithium battery transport safety · IATF 16949 automotive quality · ISO 14001 environmental management). Opens findings automatically when rules are violated; auto-resolves when conditions clear.
 
----
-
-## 🧠 Concept & Motivation
-
-Every major AI vendor is racing to deploy GenAI horizontally — chatbots, copilots, content generation. The real white space?
-
-**AI that doesn't just suggest the next step — it executes it, autonomously, inside a real industrial process, with full auditability.**
-
-This project explores what that looks like: three specialized agents, each owning a distinct domain of industrial operations, coordinated by a central orchestrator, with every action logged in a human-readable audit trail — and a RAG layer that lets you ask the system anything in plain English.
+All four agents communicate through an event bus (`core/event_bus.py`) and read/write to a shared state store (`core/state_store.py`).
 
 ---
 
-## 🏗️ Architecture
+## Dashboard
 
-```
-┌────────────────────────────────────────────────────────────┐
-│                  HEPHAESTUS ORCHESTRATOR                   │
-│              Coordinates all agents & message bus          │
-└────────┬──────────────┬──────────────┬────────────────────┘
-         │              │              │
-   ┌─────▼─────┐  ┌─────▼─────┐  ┌────▼──────┐
-   │  HERMES   │  │ HEPHAESTUS│  │  THEMIS   │
-   │Procurement│  │   CORE    │  │Compliance │
-   │  Agent    │  │ Scheduling│  │  & Audit  │
-   └─────┬─────┘  └─────┬─────┘  └────┬──────┘
-         │              │             │
-         └──────────────┴─────────────┤
-                                      ▼
-                              ┌───────────────┐
-                              │  AUDIT LOG    │
-                              │ (THEMIS engine)│
-                              └───────┬───────┘
-                                      │
-                              ┌───────▼───────┐
-                              │  RAG ENGINE   │
-                              │ POST /api/query│
-                              └───────────────┘
-```
+Six tabs, each backed by real API endpoints:
 
-### Agent Breakdown
+| Tab | Shows |
+|-----|-------|
+| **Executive** | Yield trend, cells shipped, throughput, scrap saved, framework scores |
+| **Operations** | Throughput chart, cells-by-stage, equipment health table, recent FORGE flags |
+| **Production** | SCADA-style schematic of the 9-stage line with animated cells flowing through |
+| **Procurement** | Open POs, lifetime spend, spend-by-material donut, inventory bars with reorder thresholds, PO history, 17-supplier scorecards |
+| **Compliance** | Findings by severity & framework, framework deep-dive cards, full findings table, all 12 monitored rules |
+| **FORGE** | Cells evaluated, flag rate, scrap saved, model performance metrics, agent behavior explainer, recently flagged cells |
 
-| Agent | Role | Key Capability |
-|-------|------|---------------|
-| **HERMES** | Autonomous Procurement | Scores vendors across 17 variables, raises POs, routes for human approval |
-| **HEPHAESTUS CORE** | Shop Floor Scheduling | Rebalances production schedules, predicts machine failures 72 hours ahead |
-| **THEMIS** | Compliance & Audit | 47 regulatory frameworks, natural-language audit trail, full reversibility |
-| **RAG Engine** | Intelligence Layer | Intent classification + context retrieval over live agent state |
+Built with vanilla HTML/CSS/JS + Plotly. No frontend framework. Dark "hacker SCADA" terminal aesthetic.
 
 ---
 
-## 🤖 Natural Language Interface (RAG)
+## Oracle: hybrid pseudo-RAG chat
 
-HEPHAESTUS exposes a `/api/query` endpoint that answers questions in plain English by retrieving live context from agent state.
+`/api/query` accepts plain-English questions and routes to one of two backends:
 
-**Try it:**
+- **Structured handlers** (8 of them) for live state queries: yield, equipment, findings, POs, inventory, scrap, suppliers, agents
+- **Keyword-retrieval knowledge base** (10 documents covering agent behavior, frameworks, architecture) with stopword filtering and whole-word matching
+
+Every response cites which documents/handlers it pulled context from. This is *not* a vector RAG — it\'s a deliberately simple structured-query + keyword-match system. The point was to learn the pattern, not to ship production RAG.
+
+Set `ANTHROPIC_API_KEY` to enable Claude-powered answer generation on top of the retrieved context. Without the key, responses are deterministic and rule-based.
+
+---
+
+## Architecture
+Simulator (factory.py) │ │ publishes events ▼ Event Bus (core/event_bus.py) ─────► State Store (core/state_store.py) │ ├──► FORGE (subscribes to CellLifecycleEvent) ├──► HERMES (subscribes to MaterialQualityEvent) └──► THEMIS (subscribes to all events, evaluates 12 rules) │ └──► /api/* endpoints (FastAPI) │ └──► static/index.html (dashboard)
+
+
+- 4 typed event dataclasses (`events/types.py`)
+- Compressed time: `SIM_MINUTES_PER_TICK = 60`, so a tick advances the sim clock by an hour
+- Material batches emit every 100 cells produced; PO lifecycle advances on sim-clock (PLACED → IN_TRANSIT = 4 sim hours, IN_TRANSIT → RECEIVED = 24 sim hours)
+- Equipment auto-maintenance fires every 120 ticks (~5 sim-days)
+
+---
+
+## Run locally
 
 ```bash
-curl -X POST https://hephaestus-agentic-ai-production.up.railway.app/api/query \
-  -H "Content-Type: application/json" \
-  -d '{"question": "Which machine is most likely to fail?"}'
-```
-
-**Supported query types:**
-
-| Question | Intent | Retrieved Context |
-|----------|--------|-------------------|
-| "Which machine is most likely to fail?" | machine_health | Live sensor data + health index |
-| "What's our biggest supply chain risk?" | inventory | Stock levels + days-remaining calc |
-| "Should we order more Carbon Fibre Panels?" | inventory | Reorder point vs current stock |
-| "How many POs are pending approval?" | procurement | Order queue state |
-| "Are we compliant with ISO 9001?" | compliance | THEMIS audit results |
-| "What's our current OEE trend?" | throughput | 8-cycle throughput history |
-| "What jobs are running right now?" | schedule | FORGE production schedule |
-| "Give me a status overview" | status | All agents combined |
-
-**Architecture:**
-
-```
-User question → Intent classifier (keyword scoring)
-              → Context retriever (pulls relevant STATE)
-              → Answer generator (rule-based or Claude Haiku)
-              → THEMIS audit log entry
-              → JSON response with sources
-```
-
-The engine works **zero-config** out of the box using rule-based grounded answers. Set the `ANTHROPIC_API_KEY` environment variable to upgrade to Claude Haiku-powered natural language responses.
-
----
-
-## 🚀 Simulated Performance Metrics
-
-| Metric | HEPHAESTUS | Industry Baseline |
-|--------|-----------|-------------------|
-| Procurement cycle time | 6.7 hours | 4.2 days |
-| Procurement error rate | 0.003% | 2.1% |
-| Vendor cost optimization | 12.3% savings | — |
-| Schedule adherence | 91.4% | 67% |
-| Unplanned downtime reduction | 43% | — |
-| Failure prediction lead time | 72 hours | Reactive only |
-
----
-
-## 📊 Real Data Integration
-
-HEPHAESTUS loads real datasets from Kaggle to power its decision-making:
-
-- **Machine Health Dataset** — sensor readings, vibration, temperature, failure history
-- **DataCo Supply Chain Dataset** — vendor performance, lead times, pricing, regional risk
-
-When the `/data` folder is populated, agents operate on real numbers. When it isn't, they fall back to high-fidelity simulation. The same code path runs both.
-
----
-
-## 📁 Project Structure
-
-```
-hephaestus-agentic-ai/
-│
-├── app.py                  # FastAPI server, all REST endpoints
-├── rag_engine.py           # Natural language query engine
-├── data_loader.py          # Kaggle dataset loader (machine + supply chain)
-├── hephaestus_prototype.py # Original CLI multi-agent system
-│
-├── static/
-│   └── index.html          # Live dashboard frontend
-│
-├── data/                   # Kaggle datasets (gitignored, download separately)
-├── images/                 # Dashboard screenshots
-│
-├── railway.toml            # Railway deployment config
-├── requirements.txt        # Python dependencies
-├── .gitignore
-└── README.md
-```
-
----
-
-## ⚙️ Run Locally
-
-```bash
-# 1. Clone the repo
 git clone https://github.com/nagasaitankasala2000-spec/hephaestus-agentic-ai.git
 cd hephaestus-agentic-ai
-
-# 2. Install dependencies
 pip install -r requirements.txt
-
-# 3. Launch the API server
 python app.py
-
-# 4. Open the dashboard
 open http://localhost:8000
 ```
 
@@ -183,96 +76,63 @@ API docs at `http://localhost:8000/docs`.
 
 ---
 
-## 🌐 Deploy Your Own
+## Project structure
+hephaestus-agentic-ai/ ├── app.py FastAPI server + all REST endpoints ├── agents/ │ ├── forge.py XGBoost-based at-risk cell prediction │ ├── hermes.py Procurement: 17 suppliers, full PO lifecycle │ ├── themis.py Compliance: 3 frameworks, 12 rules │ └── oracle.py Hybrid pseudo-RAG chat ├── simulator/ │ ├── factory.py 9-stage line, time progression, event emission │ ├── equipment.py Health, throughput factor, scrap multiplier │ ├── production_line.py Stage-by-stage cell advancement │ └── config.py 17 suppliers, 6 materials, stage parameters ├── compliance/ │ └── frameworks.py UN 38.3 + IATF 16949 + ISO 14001 rule definitions ├── core/ │ ├── event_bus.py Pub/sub │ └── state_store.py Thread-safe in-memory state ├── events/types.py 4 typed event dataclasses ├── docs/knowledge_base.py 10 documents + keyword retrieval for Oracle ├── ml/ │ ├── yield_predictor.py XGBoost model wrapper │ ├── train_yield_model.py Training script │ └── models/yield_model.pkl Trained classifier (~670 KB) ├── static/index.html Dashboard (6 tabs, ~3000 lines) ├── BUGS.md Known bugs (open + closed) ├── railway.toml Railway deployment config └── requirements.txt
 
-This repo is ready to deploy on Railway in one click:
-
-1. Fork the repo
-2. Sign in at [railway.app](https://railway.app) → New Project → Deploy from GitHub repo
-3. Select your fork → Railway auto-detects Python and reads `railway.toml`
-4. (Optional) Add `ANTHROPIC_API_KEY` env var to enable LLM-powered RAG
-5. Generate domain → live URL in ~3 minutes
 
 ---
 
-## 🔑 Key Design Patterns
+## Honest notes on what works and what doesn\'t
 
-- **Multi-agent architecture** — each agent owns a distinct domain with no tight coupling
-- **Shared audit log** — every agent writes to a single audit infrastructure (THEMIS owns it)
-- **Dataclass-driven models** — `ProcurementOrder`, `ProductionJob`, `ComplianceReport` fully typed
-- **Composite scoring** — vendor selection uses weighted multi-variable scoring across 5 dimensions
-- **Status state machine** — each agent tracks `IDLE → THINKING → EXECUTING → WAITING → COMPLETE`
-- **Separation of concerns** — orchestrator coordinates, agents own domain logic
-- **Graceful degradation** — falls back to simulation if real data unavailable; falls back to rule-based RAG if no LLM key
-- **Grounded answers** — every RAG response cites the specific context blocks it used
+**Works:**
+- All 6 dashboard tabs render real data from the live simulator
+- FORGE evaluates every cell exiting Coating in <2ms
+- HERMES PO lifecycle cycles correctly (validated by 5-hour wall-clock soak: 444 POs placed and received, all materials replenished, ELECTROLYTE correctly identified as bottleneck material)
+- THEMIS auto-opens and auto-resolves findings as rule conditions change
+- Oracle answers structured queries with cited sources
 
----
+**Known gaps (see BUGS.md):**
+- Dashboard is read-only — no buttons to trigger maintenance, resolve findings, override thresholds, or manually place POs
+- Inventory can theoretically go below zero (the simulator doesn\'t halt MIXING when materials are out)
+- Cells flagged by FORGE rarely trigger because the synthetic measurement variance keeps failure probability well below the 0.70 threshold
 
-## 🔭 What This Demonstrates
-
-- Designing and implementing a **multi-agent AI system** from scratch
-- Understanding of **industrial enterprise workflows** — procurement, scheduling, compliance
-- **Agentic AI patterns** — autonomous decision-making with human-in-the-loop approval gates
-- **Audit-first design** — every action logged, explainable, and reversible before execution
-- **RAG implementation** — intent classification + context retrieval over structured live data
-- **Full-stack deployment** — FastAPI backend, vanilla JS dashboard, public cloud hosting
-- Mapping **real-world business processes** to software architecture
+**What this is not:**
+- Not a production system
+- Not a real RAG (no embeddings, no vector store — keyword + structured handlers only)
+- Not a benchmark or industry comparison — the simulation generates its own ground truth
+- Not connected to a real ERP, MES, or factory
 
 ---
 
-## 🗺️ Roadmap
+## What this project taught me
 
-- [x] FastAPI backend with all three agents exposed via REST
-- [x] Live dashboard with real-time metrics
-- [x] Real Kaggle dataset integration (machine health + supply chain)
-- [x] RAG natural language query layer
-- [x] Public deployment on Railway
-- [ ] In-dashboard chat UI for the RAG endpoint
-- [ ] Connect HERMES to a real ERP API (SAP, Oracle NetSuite) via REST
-- [ ] PostgreSQL backend so state persists across restarts
-- [ ] Authentication and role-based access control
-- [ ] Inter-agent messaging via async queues
-- [ ] Containerize with Docker for portable deployment
+- Event-driven architecture with a pub/sub bus and shared state store
+- Multi-agent coordination without tight coupling
+- Integrating ML inference (XGBoost) into a running operational system
+- Building a SCADA-style operations dashboard from scratch with Plotly
+- The difference between wall-clock and sim-clock time, and how that distinction breaks things if you confuse the two (a real bug that took a systematic debugging session to find — documented in BUGS.md)
+- Patcher-script workflows for editing large HTML files programmatically
+- Deploying a Python app to Railway
 
 ---
 
-## 💡 Industry Context
+## Tech stack
 
-This project was inspired by a gap analysis of the enterprise AI market (2025–2026):
-
-- **Microsoft Copilot** — broad and horizontal, no industrial depth
-- **Salesforce Agentforce** — front office only, no manufacturing footprint
-- **ServiceNow Now Assist** — IT/HR scope, no shop floor capability
-- **The gap** — agentic AI that executes inside manufacturing, supply chain, and procurement workflows with enterprise-grade compliance. Nobody owns this space yet.
-
-HEPHAESTUS is a working prototype of what that should look like.
+Python 3.10 · FastAPI · Uvicorn · pandas · NumPy · scikit-learn · XGBoost · Plotly (CDN) · vanilla HTML/CSS/JS · Railway
 
 ---
 
-## 🛠️ Tech Stack
+## Author
 
-| Layer | Technology |
-|-------|-----------|
-| Backend | Python 3.12 · FastAPI · Uvicorn |
-| Data | pandas · NumPy · scikit-learn |
-| RAG | Custom intent classifier · context retriever · optional Claude Haiku via Anthropic API |
-| Frontend | Vanilla HTML/CSS/JS · Chart.js |
-| Deployment | Railway · GitHub auto-deploy |
-| Datasets | Kaggle (machine health + DataCo supply chain) |
+**Naga Sai Tankasala**
+MS IT Project Management (Indiana Wesleyan, in progress) · MS Business Analytics (Sacred Heart University) · B.Tech Mechanical Engineering
+
+Connecticut, USA
+
+[GitHub](https://github.com/nagasaitankasala2000-spec) · [LinkedIn](https://www.linkedin.com/)
 
 ---
 
-## 👤 Author
+## License
 
-**Naga Sai Tankasala** — MS IT Project Management (Indiana Wesleyan University) | MS Business Analytics (Sacred Heart University) | B.Tech Mechanical Engineering
-
-Targeting: Process Improvement Analyst | Business Process Architect | Industry 4.0 Transformation roles at Siemens · Accenture · Capgemini · Deloitte · Honeywell · PTC · Pratt & Whitney
-
-📍 Connecticut, USA  
-🔗 [LinkedIn](https://www.linkedin.com/) · [GitHub](https://github.com/nagasaitankasala2000-spec)
-
----
-
-## 📄 License
-
-MIT License — free to use, extend, and build on.
+MIT.
