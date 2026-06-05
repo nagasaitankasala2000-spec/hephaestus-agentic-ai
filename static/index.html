@@ -346,7 +346,7 @@ body::before {
     <button class="tab" data-tab="production">▸ PRODUCTION</button>
     <button class="tab" data-tab="procurement">▸ PROCUREMENT</button>
     <button class="tab" data-tab="compliance">▸ COMPLIANCE</button>
-    <button class="tab" disabled style="color:var(--text-faint);cursor:not-allowed;">FORGE (8B)</button>
+    <button class="tab" data-tab="forge">▸ FORGE</button>
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════
@@ -858,6 +858,100 @@ body::before {
 
   </div>
 
+  <!-- ═══════════════════════════════════════════════════════════
+       TAB 6: FORGE
+       =══════════════════════════════════════════════════════════ -->
+  <div class="tab-content" id="tab-forge">
+
+    <div class="metric-row">
+      <div class="metric"><div class="metric-label">CELLS EVALUATED</div><div class="metric-value" id="forge-evaluated">0</div><div class="metric-foot">lifetime · ML inference at COATING exit</div></div>
+      <div class="metric" id="forge-flagged-card"><div class="metric-label">CELLS FLAGGED</div><div class="metric-value" id="forge-flagged">0</div><div class="metric-foot">predicted at-risk</div></div>
+      <div class="metric"><div class="metric-label">FLAG RATE</div><div class="metric-value" id="forge-flag-rate">0.0%</div><div class="metric-foot">flagged / evaluated</div></div>
+      <div class="metric"><div class="metric-label">SCRAP SAVED</div><div class="metric-value" id="forge-saved">$0</div><div class="metric-foot">$45 per flagged cell</div></div>
+      <div class="metric" id="forge-status-card"><div class="metric-label">MODEL STATUS</div><div class="metric-value" id="forge-model-state" style="font-size:18px;">LOADING</div><div class="metric-foot" id="forge-threshold">threshold = 0.70</div></div>
+    </div>
+
+    <div class="chart-grid-2">
+      <div class="chart-box">
+        <div class="panel-head">
+          <span class="panel-title">[ FORGE EVALUATIONS · CUMULATIVE ]</span>
+          <span class="panel-sub">total cells scored over time</span>
+        </div>
+        <div id="chart-forge-evaluated" class="chart-render"></div>
+      </div>
+      <div class="chart-box">
+        <div class="panel-head">
+          <span class="panel-title">[ SCRAP SAVINGS · CUMULATIVE ]</span>
+          <span class="panel-sub">USD saved by early flag</span>
+        </div>
+        <div id="chart-forge-savings" class="chart-render"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <span class="panel-title">[ MODEL PERFORMANCE ]</span>
+        <span class="panel-sub">XGBoost classifier · trained on 25,000 synthetic cells</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:14px;">
+        <div class="metric"><div class="metric-label">ACCURACY</div><div class="metric-value" style="color:var(--neon);">95.18%</div><div class="metric-foot">test set</div></div>
+        <div class="metric"><div class="metric-label">AUC</div><div class="metric-value" style="color:var(--neon);">0.9214</div><div class="metric-foot">ROC area</div></div>
+        <div class="metric"><div class="metric-label">PRECISION</div><div class="metric-value" style="color:var(--neon);">0.9167</div><div class="metric-foot">of flagged · true positive</div></div>
+        <div class="metric"><div class="metric-label">RECALL</div><div class="metric-value" style="color:var(--neon);">0.8525</div><div class="metric-foot">of failures · caught</div></div>
+        <div class="metric"><div class="metric-label">F1</div><div class="metric-value" style="color:var(--neon);">0.8834</div><div class="metric-foot">harmonic mean</div></div>
+      </div>
+      <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);color:var(--text-dim);font-size:11px;line-height:1.6;">
+        <strong style="color:var(--neon);">Architecture:</strong> 200 trees · max_depth 6 · 14 features (coating-exit measurements: slot_die_gap, web_speed, drying_temp, web_tension + upstream proxies) ·
+        <strong style="color:var(--neon);">Latency:</strong> ~2ms per prediction (in-process XGBoost) ·
+        <strong style="color:var(--neon);">Decision rule:</strong> failure probability ≥ 0.70 → flag for early scrap
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <span class="panel-title">[ HOW FORGE WORKS ]</span>
+        <span class="panel-sub">agent behavior</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;">
+        <div style="background:var(--bg-panel-hi);border:1px solid var(--border);padding:12px;">
+          <div style="color:var(--neon);font-size:11px;letter-spacing:1px;margin-bottom:6px;">▸ 1. SUBSCRIBE</div>
+          <div style="color:var(--text-dim);font-size:11px;line-height:1.5;">Listens for every CellLifecycleEvent from the simulator's event bus.</div>
+        </div>
+        <div style="background:var(--bg-panel-hi);border:1px solid var(--border);padding:12px;">
+          <div style="color:var(--neon);font-size:11px;letter-spacing:1px;margin-bottom:6px;">▸ 2. FILTER</div>
+          <div style="color:var(--text-dim);font-size:11px;line-height:1.5;">Only acts on cells <em>exiting</em> COATING — earliest measurement point with meaningful failure signal.</div>
+        </div>
+        <div style="background:var(--bg-panel-hi);border:1px solid var(--border);padding:12px;">
+          <div style="color:var(--neon);font-size:11px;letter-spacing:1px;margin-bottom:6px;">▸ 3. INFER</div>
+          <div style="color:var(--text-dim);font-size:11px;line-height:1.5;">Pulls 14 features, runs XGBoost classifier, gets failure probability in ~2ms.</div>
+        </div>
+        <div style="background:var(--bg-panel-hi);border:1px solid var(--border);padding:12px;">
+          <div style="color:var(--neon);font-size:11px;letter-spacing:1px;margin-bottom:6px;">▸ 4. ACT</div>
+          <div style="color:var(--text-dim);font-size:11px;line-height:1.5;">If p ≥ 0.70: flag for early scrap. Saves ~$45 (materials + 18 formation-hours) per flagged cell.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <span class="panel-title">[ RECENT FLAGGED CELLS ]</span>
+        <span class="panel-sub">cells predicted at-risk · newest first</span>
+      </div>
+      <table class="flags-table" id="forge-recent-table">
+        <thead>
+          <tr>
+            <th>CELL ID</th>
+            <th>RISK</th>
+            <th>STAGE EXIT</th>
+            <th>KEY MEASUREMENT</th>
+          </tr>
+        </thead>
+        <tbody id="forge-recent-tbody"><tr class="empty-row"><td colspan="4">No cells flagged yet — production running within nominal parameters.</td></tr></tbody>
+      </table>
+    </div>
+
+  </div>
+
 </div>
 
 <!-- ─── TERMINAL FOOTER ─── -->
@@ -951,6 +1045,9 @@ document.querySelectorAll('.tab[data-tab]').forEach(btn => {
       } else if (target === 'compliance') {
         Plotly.Plots.resize('chart-findings-severity');
         Plotly.Plots.resize('chart-findings-framework');
+      } else if (target === 'forge') {
+        Plotly.Plots.resize('chart-forge-evaluated');
+        Plotly.Plots.resize('chart-forge-savings');
       }
     }, 50);
   });
@@ -1800,6 +1897,87 @@ function applyThemisFindings(data) {
   });
 }
 
+
+/* ═══════════════════════════════════════════════════════════════
+   FORGE TAB
+   ═══════════════════════════════════════════════════════════════ */
+function initForgeCharts() {
+  Plotly.newPlot('chart-forge-evaluated', [{
+    x: [], y: [], mode: 'lines', line: { color: '#00ff9c', width: 2.5, shape: 'spline' },
+    fill: 'tozeroy', fillcolor: 'rgba(0,255,156,0.08)',
+  }], { ...PLOT_LAYOUT_BASE,
+    yaxis: { ...PLOT_LAYOUT_BASE.yaxis, title: { text: 'cells', font: { color: '#6c8a80', size: 10 } } },
+  }, PLOT_CONFIG);
+
+  Plotly.newPlot('chart-forge-savings', [{
+    x: [], y: [], mode: 'lines', line: { color: '#00ff9c', width: 2.5, shape: 'spline' },
+    fill: 'tozeroy', fillcolor: 'rgba(0,255,156,0.08)',
+  }], { ...PLOT_LAYOUT_BASE,
+    yaxis: { ...PLOT_LAYOUT_BASE.yaxis, tickprefix: '$' },
+  }, PLOT_CONFIG);
+}
+
+async function pollForgeTab() {
+  try {
+    const r = await fetch('/api/forge/status');
+    if (r.ok) {
+      const data = await r.json();
+      applyForgeTabStatus(data);
+    }
+    // history charts
+    fetchAndPlot('forge_evaluated', 'chart-forge-evaluated');
+    fetchAndPlot('scrap_saved', 'chart-forge-savings');
+    // recent flagged cells from simulator status
+    const simR = await fetch('/api/simulator/status');
+    if (simR.ok) {
+      const sim = await simR.json();
+      const ym = sim.yield_metrics || {};
+      const atRisk = ym.cells_at_risk || [];
+      renderForgeTabRecent(atRisk);
+    }
+  } catch (e) {}
+}
+
+function applyForgeTabStatus(d) {
+  document.getElementById('forge-evaluated').textContent = (d.cells_evaluated || 0).toLocaleString();
+  document.getElementById('forge-flagged').textContent = (d.cells_flagged_at_risk || 0).toLocaleString();
+  document.getElementById('forge-flag-rate').textContent = (d.flag_rate_pct || 0).toFixed(1) + '%';
+  document.getElementById('forge-saved').textContent = fmtMoney(d.estimated_savings_usd || 0);
+  document.getElementById('forge-model-state').textContent = d.model_ready ? 'READY' : 'OFFLINE';
+  document.getElementById('forge-threshold').textContent = 'threshold = ' + (d.risk_threshold ?? 0.70);
+
+  const statusCard = document.getElementById('forge-status-card');
+  statusCard.classList.remove('warn', 'crit');
+  if (!d.model_ready) statusCard.classList.add('crit');
+
+  const flaggedCard = document.getElementById('forge-flagged-card');
+  flaggedCard.classList.remove('warn', 'crit');
+  const flagged = d.cells_flagged_at_risk || 0;
+  if (flagged >= 50) flaggedCard.classList.add('crit');
+  else if (flagged >= 10) flaggedCard.classList.add('warn');
+}
+
+function renderForgeTabRecent(cellsAtRisk) {
+  const tbody = document.getElementById('forge-recent-tbody');
+  if (!cellsAtRisk || cellsAtRisk.length === 0) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="4">No cells flagged yet — production running within nominal parameters.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = '';
+  cellsAtRisk.slice(-30).reverse().forEach(c => {
+    const risk = c.risk_score || 0;
+    const km = c.key_measurements || {};
+    const summary = Object.entries(km).map(([k, v]) => k.substring(0,12) + '=' + v).join(', ');
+    const tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td style="color:var(--neon);">' + (c.cell_id || '—') + '</td>' +
+      '<td class="risk-high">' + (risk * 100).toFixed(1) + '%</td>' +
+      '<td style="color:var(--text-dim);">' + (c.stage_exited || '—') + '</td>' +
+      '<td style="color:var(--text-dim);font-size:10px;">' + (summary || '—') + '</td>';
+    tbody.appendChild(tr);
+  });
+}
+
 /* ═══════════════════════════════════════════════════════════════
    BOOT
    ═══════════════════════════════════════════════════════════════ */
@@ -1807,6 +1985,7 @@ window.addEventListener('DOMContentLoaded', () => {
   initCharts();
   initProcurementCharts();
   initComplianceCharts();
+  initForgeCharts();
   initFlowCells();
 
   pollSimulator();
@@ -1816,6 +1995,7 @@ window.addEventListener('DOMContentLoaded', () => {
   pollHistory();
   pollProcurement();
   pollCompliance();
+  pollForgeTab();
 
   setInterval(pollSimulator, POLL_INTERVAL_MS);
   setInterval(pollForge, POLL_INTERVAL_MS);
@@ -1824,6 +2004,7 @@ window.addEventListener('DOMContentLoaded', () => {
   setInterval(pollHistory, HISTORY_POLL_INTERVAL_MS);
   setInterval(pollProcurement, POLL_INTERVAL_MS * 2);
   setInterval(pollCompliance, POLL_INTERVAL_MS * 2);
+  setInterval(pollForgeTab, POLL_INTERVAL_MS);
   termStreamLoop();
 });
 </script>
