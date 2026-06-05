@@ -158,7 +158,7 @@ class Factory:
 
         # 3. Advance every cell in flight
         self._advance_cells()
-# Material batch tracking (v2 HERMES integration)
+        # Material batch tracking (v2 HERMES integration)
         self._cells_since_last_batch += 1
         self._maybe_emit_material_batch()
 # Auto-maintenance every ~5 sim-days (until manual controls exist)

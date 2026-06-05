@@ -241,9 +241,13 @@ class StateStore:
             self._material_inventory[material] = max(0.0, level)
 
     def update_supplier_score(self, supplier: str, scorecard: dict) -> None:
-        """Set or update a supplier's scorecard (HERMES-owned)."""
+        """Update a supplier's scorecard (HERMES-owned). Merges into existing,
+        preserving baseline fields (quality_mean, quality_stddev, is_preferred)
+        even when only observed fields are passed in."""
         with self._lock:
+            existing = self._supplier_scores.get(supplier, {})
             self._supplier_scores[supplier] = {
+                **existing,
                 **scorecard,
                 "last_updated": datetime.now().isoformat(),
             }

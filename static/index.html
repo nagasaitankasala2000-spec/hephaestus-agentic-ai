@@ -344,7 +344,7 @@ body::before {
     <button class="tab active" data-tab="executive">▸ EXECUTIVE</button>
     <button class="tab" data-tab="operations">▸ OPERATIONS</button>
     <button class="tab" data-tab="production">▸ PRODUCTION</button>
-    <button class="tab" disabled style="color:var(--text-faint);cursor:not-allowed;">PROCUREMENT (8B)</button>
+    <button class="tab" data-tab="procurement">▸ PROCUREMENT</button>
     <button class="tab" disabled style="color:var(--text-faint);cursor:not-allowed;">COMPLIANCE (8B)</button>
     <button class="tab" disabled style="color:var(--text-faint);cursor:not-allowed;">FORGE (8B)</button>
   </div>
@@ -696,6 +696,88 @@ body::before {
 
   </div>
 
+
+  <!-- ═══════════════════════════════════════════════════════════
+       TAB 4: PROCUREMENT
+       =══════════════════════════════════════════════════════════ -->
+  <div class="tab-content" id="tab-procurement">
+
+    <div class="metric-row">
+      <div class="metric"><div class="metric-label">OPEN POs</div><div class="metric-value" id="proc-open-pos">0</div><div class="metric-foot">awaiting receipt</div></div>
+      <div class="metric"><div class="metric-label">OPEN VALUE</div><div class="metric-value" id="proc-open-value">$0</div><div class="metric-foot">USD outstanding</div></div>
+      <div class="metric"><div class="metric-label">LIFETIME POs</div><div class="metric-value" id="proc-total-pos">0</div><div class="metric-foot">all states</div></div>
+      <div class="metric"><div class="metric-label">LIFETIME SPEND</div><div class="metric-value" id="proc-total-spend">$0</div><div class="metric-foot">all materials</div></div>
+      <div class="metric"><div class="metric-label">AVG QUALITY</div><div class="metric-value" id="proc-avg-quality">--%</div><div class="metric-foot">across observed suppliers</div></div>
+    </div>
+
+    <div class="chart-grid-2">
+      <div class="chart-box">
+        <div class="panel-head">
+          <span class="panel-title">[ SPEND BY MATERIAL ]</span>
+          <span class="panel-sub">6 materials · lifetime</span>
+        </div>
+        <div id="chart-spend-by-material" class="chart-render"></div>
+      </div>
+      <div class="chart-box">
+        <div class="panel-head">
+          <span class="panel-title">[ PO STATUS BREAKDOWN ]</span>
+          <span class="panel-sub">count by lifecycle state</span>
+        </div>
+        <div id="chart-po-status" class="chart-render"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <span class="panel-title">[ MATERIAL INVENTORY ]</span>
+        <span class="panel-sub">reorder triggers at 30% of typical max</span>
+      </div>
+      <div id="proc-inventory-bars"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <span class="panel-title">[ PURCHASE ORDERS ]</span>
+        <span class="panel-sub">last 30 · newest first</span>
+      </div>
+      <table class="eq-table" id="proc-pos-table">
+        <thead>
+          <tr>
+            <th>PO ID</th>
+            <th>STATUS</th>
+            <th>SUPPLIER</th>
+            <th>MATERIAL</th>
+            <th>QTY</th>
+            <th>VALUE</th>
+            <th>CREATED</th>
+          </tr>
+        </thead>
+        <tbody id="proc-pos-tbody"><tr class="empty-row"><td colspan="7">No purchase orders yet — HERMES will auto-place when inventory drops below 30%.</td></tr></tbody>
+      </table>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <span class="panel-title">[ SUPPLIER SCORECARDS ]</span>
+        <span class="panel-sub">17 suppliers · sorted by observed quality</span>
+      </div>
+      <table class="eq-table" id="proc-suppliers-table">
+        <thead>
+          <tr>
+            <th>SUPPLIER</th>
+            <th>MATERIAL</th>
+            <th>BASELINE QUALITY</th>
+            <th>OBSERVED AVG</th>
+            <th>LOTS</th>
+            <th>STATUS</th>
+          </tr>
+        </thead>
+        <tbody id="proc-suppliers-tbody"></tbody>
+      </table>
+    </div>
+
+  </div>
+
 </div>
 
 <!-- ─── TERMINAL FOOTER ─── -->
@@ -783,6 +865,9 @@ document.querySelectorAll('.tab[data-tab]').forEach(btn => {
       } else if (target === 'operations') {
         Plotly.Plots.resize('chart-throughput');
         Plotly.Plots.resize('chart-equipment-trend');
+      } else if (target === 'procurement') {
+        Plotly.Plots.resize('chart-spend-by-material');
+        Plotly.Plots.resize('chart-po-status');
       }
     }, 50);
   });
@@ -1293,11 +1378,185 @@ function termStreamLoop() {
   });
 })();
 
+
+/* ═══════════════════════════════════════════════════════════════
+   PROCUREMENT TAB — HERMES data
+   ═══════════════════════════════════════════════════════════════ */
+const MATERIAL_MAX = {
+  "NCM_811_CATHODE": 100,
+  "GRAPHITE_ANODE":  80,
+  "ELECTROLYTE":     50,
+  "SEPARATOR_FILM":  200,
+  "COPPER_FOIL":     150,
+  "ALUMINUM_FOIL":   150,
+};
+
+function initProcurementCharts() {
+  Plotly.newPlot('chart-spend-by-material', [{
+    type: 'pie',
+    labels: [],
+    values: [],
+    marker: { colors: ['#00ff9c', '#00c47a', '#ffb300', '#4ecdf4', '#ff7eb6', '#aa66ff'] },
+    textinfo: 'label+percent',
+    textfont: { color: '#c8e8d8', size: 10, family: 'JetBrains Mono, monospace' },
+    hole: 0.5,
+  }], { ...PLOT_LAYOUT_BASE, margin: { l: 10, r: 10, t: 10, b: 10 } }, PLOT_CONFIG);
+
+  Plotly.newPlot('chart-po-status', [{
+    type: 'bar',
+    x: [], y: [],
+    marker: { color: '#00ff9c' },
+  }], { ...PLOT_LAYOUT_BASE,
+    yaxis: { ...PLOT_LAYOUT_BASE.yaxis, title: { text: 'count', font: { color: '#6c8a80', size: 10 } } },
+  }, PLOT_CONFIG);
+}
+
+async function pollProcurement() {
+  try {
+    const [statusR, posR, inventoryR, suppliersR] = await Promise.all([
+      fetch('/api/hermes/v2/status').then(r => r.ok ? r.json() : null),
+      fetch('/api/hermes/v2/purchase-orders').then(r => r.ok ? r.json() : null),
+      fetch('/api/hermes/v2/inventory').then(r => r.ok ? r.json() : null),
+      fetch('/api/hermes/v2/suppliers').then(r => r.ok ? r.json() : null),
+    ]);
+    if (statusR) applyHermesStatus(statusR);
+    if (posR) applyHermesPOs(posR);
+    if (inventoryR) applyHermesInventory(inventoryR);
+    if (suppliersR) applyHermesSuppliers(suppliersR);
+  } catch (e) { /* swallow */ }
+}
+
+function applyHermesStatus(data) {
+  const placed = data.pos_placed || 0;
+  const received = data.pos_received || 0;
+  document.getElementById('proc-total-pos').textContent = (placed + received).toLocaleString();
+  document.getElementById('proc-total-spend').textContent = fmtMoney(data.total_spend_usd || 0);
+
+  const spendByMat = data.spend_by_material || {};
+  const labels = Object.keys(spendByMat);
+  const values = Object.values(spendByMat);
+  if (labels.length > 0) {
+    Plotly.restyle('chart-spend-by-material', { labels: [labels], values: [values] });
+  }
+}
+
+function applyHermesPOs(data) {
+  const summary = data.summary || {};
+  const byStatus = summary.by_status || {};
+  document.getElementById('proc-open-pos').textContent = ((byStatus.PLACED || 0) + (byStatus.IN_TRANSIT || 0));
+  document.getElementById('proc-open-value').textContent = fmtMoney(summary.open_order_value_usd || 0);
+
+  const statuses = ['PLACED', 'IN_TRANSIT', 'RECEIVED', 'CONSUMED'];
+  const counts = statuses.map(s => byStatus[s] || 0);
+  Plotly.restyle('chart-po-status', { x: [statuses], y: [counts] });
+
+  const pos = data.purchase_orders || [];
+  const tbody = document.getElementById('proc-pos-tbody');
+  if (pos.length === 0) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="7">No purchase orders yet — HERMES will auto-place when inventory drops below 30%.</td></tr>';
+    return;
+  }
+  const latest = pos.slice(-30).reverse();
+  tbody.innerHTML = '';
+  latest.forEach(po => {
+    const status = po.status || '—';
+    let cls = '';
+    if (status === 'PLACED') cls = 'warn';
+    else if (status === 'IN_TRANSIT') cls = 'warn';
+    else if (status === 'RECEIVED' || status === 'CONSUMED') cls = '';
+    const tr = document.createElement('tr');
+    tr.className = cls;
+    const created = po.created_at ? po.created_at.replace('T', ' ').substring(0, 16) : '—';
+    tr.innerHTML =
+      '<td style="color:var(--neon);">' + (po.po_id || '—').substring(0, 14) + '</td>' +
+      '<td class="eq-status ' + cls + '">' + status + '</td>' +
+      '<td>' + (po.supplier || '—') + '</td>' +
+      '<td style="color:var(--text-dim);">' + (po.material || '—') + '</td>' +
+      '<td style="color:var(--text-dim);">' + (po.quantity || 0).toLocaleString() + '</td>' +
+      '<td style="color:var(--neon);">' + fmtMoney(po.total_cost_usd || po.total_value_usd || 0) + '</td>' +
+      '<td style="color:var(--text-faint);font-size:10px;">' + created + '</td>';
+    tbody.appendChild(tr);
+  });
+}
+
+function applyHermesInventory(data) {
+  const inv = data.inventory || {};
+  const container = document.getElementById('proc-inventory-bars');
+  container.innerHTML = '';
+
+  Object.entries(inv).forEach(([mat, level]) => {
+    const max = MATERIAL_MAX[mat] || 100;
+    const pct = Math.min(100, (level / max) * 100);
+    const threshold = 30;
+    let cls = '';
+    if (pct < threshold) cls = 'crit';
+    else if (pct < threshold * 1.5) cls = 'warn';
+
+    const row = document.createElement('div');
+    row.style.cssText = 'display:grid;grid-template-columns:200px 1fr 80px;gap:14px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);';
+    row.innerHTML =
+      '<div style="color:var(--text);font-size:11px;">' + mat.replace(/_/g, ' ') + '</div>' +
+      '<div style="position:relative;height:18px;background:var(--bg-deepest);border:1px solid var(--border);">' +
+        '<div style="position:absolute;top:0;left:0;height:100%;width:' + pct + '%;background:' + (cls === 'crit' ? 'var(--crit)' : cls === 'warn' ? 'var(--warn)' : 'var(--neon)') + ';opacity:0.85;"></div>' +
+        '<div style="position:absolute;top:0;left:' + threshold + '%;width:1px;height:100%;background:var(--warn);"></div>' +
+        '<div style="position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:flex-end;padding-right:6px;font-size:10px;color:var(--text);">' + level.toFixed(1) + ' / ' + max + '</div>' +
+      '</div>' +
+      '<div style="color:var(--text-dim);font-size:10px;text-align:right;">' + pct.toFixed(0) + '%</div>';
+    container.appendChild(row);
+  });
+}
+
+function applyHermesSuppliers(data) {
+  const suppliers = data.suppliers || {};
+  const list = Object.entries(suppliers).map(([name, s]) => ({ name, ...s }));
+  // Sort: observed suppliers first (sorted by observed quality), then unobserved
+  list.sort((a, b) => {
+    const aObs = a.observed_lots || 0;
+    const bObs = b.observed_lots || 0;
+    if (aObs > 0 && bObs === 0) return -1;
+    if (aObs === 0 && bObs > 0) return 1;
+    if (aObs === 0) return (b.quality_mean || 0) - (a.quality_mean || 0);
+    return (b.observed_quality_avg || 0) - (a.observed_quality_avg || 0);
+  });
+
+  const tbody = document.getElementById('proc-suppliers-tbody');
+  tbody.innerHTML = '';
+
+  let qualitySum = 0, qualityCount = 0;
+  list.forEach(s => {
+    const observed = s.observed_lots || 0;
+    const obsQuality = s.observed_quality_avg;
+    if (obsQuality !== null && obsQuality !== undefined) {
+      qualitySum += obsQuality;
+      qualityCount++;
+    }
+    const isPreferred = s.is_preferred;
+    let cls = '';
+    if (isPreferred) cls = '';
+    const tr = document.createElement('tr');
+    const supplierLabel = isPreferred
+      ? '<span style="color:var(--neon);">★ ' + s.name + '</span>'
+      : s.name;
+    tr.innerHTML =
+      '<td>' + supplierLabel + '</td>' +
+      '<td style="color:var(--text-dim);font-size:10px;">' + (s.material || '—') + '</td>' +
+      '<td style="color:var(--text-dim);">' + (s.quality_mean || 0).toFixed(2) + '%</td>' +
+      '<td style="color:var(--neon);">' + (obsQuality !== null && obsQuality !== undefined ? obsQuality.toFixed(2) + '%' : '—') + '</td>' +
+      '<td style="color:var(--text-dim);">' + observed + '</td>' +
+      '<td style="color:var(--text-faint);font-size:10px;">' + (observed > 0 ? 'ACTIVE' : 'NOT YET OBSERVED') + '</td>';
+    tbody.appendChild(tr);
+  });
+
+  document.getElementById('proc-avg-quality').textContent =
+    qualityCount > 0 ? (qualitySum / qualityCount).toFixed(1) + '%' : '--%';
+}
+
 /* ═══════════════════════════════════════════════════════════════
    BOOT
    ═══════════════════════════════════════════════════════════════ */
 window.addEventListener('DOMContentLoaded', () => {
   initCharts();
+  initProcurementCharts();
   initFlowCells();
 
   pollSimulator();
@@ -1305,12 +1564,14 @@ window.addEventListener('DOMContentLoaded', () => {
   pollFrameworks();
   pollAtRiskCells();
   pollHistory();
+  pollProcurement();
 
   setInterval(pollSimulator, POLL_INTERVAL_MS);
   setInterval(pollForge, POLL_INTERVAL_MS);
   setInterval(pollFrameworks, POLL_INTERVAL_MS * 2);
   setInterval(pollAtRiskCells, POLL_INTERVAL_MS * 2);
   setInterval(pollHistory, HISTORY_POLL_INTERVAL_MS);
+  setInterval(pollProcurement, POLL_INTERVAL_MS * 2);
   termStreamLoop();
 });
 </script>
