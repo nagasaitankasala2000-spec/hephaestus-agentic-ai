@@ -17,3 +17,6 @@ __pycache__/
 .vscode/
 .idea/
 data/tokenized_access_logs.csv
+
+# Backup files from patcher scripts
+static/index_*_backup.html
