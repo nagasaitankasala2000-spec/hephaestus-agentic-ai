@@ -33,10 +33,13 @@ logger = logging.getLogger("hephaestus.hermes")
 # ════════════════════════════════════════════════════════════════════════
 
 # Inventory level (units of material) at which HERMES auto-orders.
-REORDER_THRESHOLD_FRACTION = 0.30  # reorder when below 30% of typical stock
+# Threshold = enough material for N days of production at target throughput.
+# This is how real factories manage inventory: "days of coverage".
+TARGET_CELLS_PER_DAY = 48000   # TLYB\'S half-scale of Tesla GF1 (~2000 cells/hr)
+TARGET_DAYS_OF_COVERAGE = 2    # always keep ~2 days of inventory minimum
 
 # Quantity ordered per PO, expressed as "cells worth of material"
-PO_SIZE_CELLS = 500
+PO_SIZE_CELLS = 192000  # 4 days of production at target throughput (48k/day)
 
 # Lifecycle timing (Alpha — fast for demo visibility)
 SIM_HOURS_PLACED_TO_TRANSIT = 4
@@ -221,8 +224,9 @@ class Hermes(Agent):
             return
 
         inventory = store.get_material_inventory().get(material, 0.0)
-        typical_stock = MATERIALS[material]["consumption_per_cell"] * 500
-        threshold = typical_stock * REORDER_THRESHOLD_FRACTION
+        # Days-of-coverage threshold: how much material we'd burn in N days at target rate
+        daily_consumption = MATERIALS[material]["consumption_per_cell"] * TARGET_CELLS_PER_DAY
+        threshold = daily_consumption * TARGET_DAYS_OF_COVERAGE
 
         if inventory >= threshold:
             return
@@ -231,8 +235,9 @@ class Hermes(Agent):
         if supplier is None:
             return
 
+        sim_now_check = self.state.get("sim_now")
         self._place_purchase_order(material, supplier)
-        return  # explicit return to prevent fallthrough
+        return
 
         # Time to reorder. Pick the best supplier.
         supplier = self._pick_best_supplier(material)

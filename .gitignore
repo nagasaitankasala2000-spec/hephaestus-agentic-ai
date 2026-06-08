@@ -20,3 +20,8 @@ data/tokenized_access_logs.csv
 
 # Backup files from patcher scripts
 static/index_*_backup.html
+
+# Regeneratable training data and collected logs
+ml/training_data.csv
+ml/collected_data.csv
+ml/models/yield_model_v1_backup.pkl

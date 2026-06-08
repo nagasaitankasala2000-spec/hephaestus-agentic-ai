@@ -21,6 +21,7 @@ import threading
 from datetime import datetime, timedelta
 
 from core.event_bus import bus
+from ml.data_collector import record_cell as _record_training_sample
 from core.state_store import store
 from events.types import (
     CellLifecycleEvent,
@@ -243,11 +244,15 @@ class Factory:
                 # Cell scrapped at this stage
                 self.scrapped_count += 1
                 self.completed_count += 1
+                _record_training_sample(
+                    {k: v for stage_dict in cell.measurements.values() for k, v in stage_dict.items()},
+                    was_scrapped=True,
+                )
                 bus.publish(CellLifecycleEvent(
                     cell_id=cell.cell_id,
                     stage="SCRAPPED",
                     previous_stage=previous_stage,
-                    measurements=cell.measurements.get(previous_stage, {}),
+                    measurements={k: v for stage_dict in cell.measurements.values() for k, v in stage_dict.items()},
                 ))
                 # Don't keep in flight
                 continue
@@ -256,11 +261,15 @@ class Factory:
                 # Cell finished GRADING successfully
                 self.shipped_count += 1
                 self.completed_count += 1
+                _record_training_sample(
+                    {k: v for stage_dict in cell.measurements.values() for k, v in stage_dict.items()},
+                    was_scrapped=False,
+                )
                 bus.publish(CellLifecycleEvent(
                     cell_id=cell.cell_id,
                     stage="SHIPPED",
                     previous_stage=previous_stage,
-                    measurements=cell.measurements.get("GRADING", {}),
+                    measurements={k: v for stage_dict in cell.measurements.values() for k, v in stage_dict.items()},
                 ))
                 continue
 
@@ -269,7 +278,7 @@ class Factory:
                 cell_id=cell.cell_id,
                 stage=result,
                 previous_stage=previous_stage,
-                measurements=cell.measurements.get(previous_stage, {}),
+                measurements={k: v for stage_dict in cell.measurements.values() for k, v in stage_dict.items()},
             ))
             still_in_flight.append(cell)
 

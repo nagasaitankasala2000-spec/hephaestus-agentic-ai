@@ -87,8 +87,32 @@ class YieldPredictor:
             return 0.0
 
         # Build feature vector in the order the model expects.
-        # Fill missing features with sensible defaults so partial measurements
-        # from early stages still produce a prediction.
+        # The simulator emits short keys (e.g. "thickness_um"); the model
+        # expects stage-prefixed keys (e.g. "coating_thickness_um").
+        # This map bridges the two schemas.
+        SIM_TO_MODEL_KEY = {
+            "thickness_um":           "coating_thickness_um",
+            "uniformity_cv":          "coating_uniformity_cv",
+            "areal_mass_mg_cm2":      "coating_areal_mass",
+            "defect_density_per_m2":  "coating_defect_density",
+            "density_g_cm3":          "calendering_density",
+            "porosity_pct":           "calendering_porosity",
+            "calender_force_n_cm":    "calendering_force",
+            "edge_burr_um":           "slitting_edge_burr",
+            "width_accuracy_mm":      "slitting_width_accuracy",
+            "winding_tension_n":      "assembly_winding_tension",
+            "weld_strength_n":        "assembly_weld_strength",
+            "initial_resistance_mohm":"assembly_initial_resistance",
+            "electrolyte_volume_ml":  "fill_electrolyte_volume",
+            "seal_pressure_psi":      "fill_seal_pressure",
+        }
+        # Normalize incoming measurements to model feature names
+        normalized = {}
+        for key, value in measurements.items():
+            mapped = SIM_TO_MODEL_KEY.get(key, key)
+            normalized[mapped] = value
+
+        # Fill missing features with sensible defaults (target nominal values)
         defaults = {
             "coating_thickness_um":        78.0,
             "coating_uniformity_cv":       1.0,
@@ -106,7 +130,7 @@ class YieldPredictor:
             "fill_seal_pressure":          120.0,
         }
         feature_vector = np.array([[
-            measurements.get(f, defaults[f]) for f in self.feature_names
+            normalized.get(f, defaults[f]) for f in self.feature_names
         ]])
 
         try:

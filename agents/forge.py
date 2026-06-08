@@ -31,7 +31,7 @@ logger = logging.getLogger("hephaestus.forge")
 
 # Stage to score on. Coating is the earliest stage where we have enough
 # signal to make a meaningful prediction.
-PREDICTION_STAGE = "COATING"
+PREDICTION_STAGE = "FORMATION"  # score late: cell has coating+calendering+slitting+assembly+fill features by now
 
 # Probability threshold for flagging a cell as at-risk.
 # 0.70 = ~precision/recall balance. Tune for business need.

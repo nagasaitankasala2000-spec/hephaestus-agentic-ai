@@ -23,6 +23,7 @@ from simulator.config import (
     EQUIPMENT as EQUIPMENT_CONFIG,
 )
 from simulator.cell import Cell, STAGE_MEASUREMENT_GENERATORS
+from simulator.specs import out_of_spec_count
 from simulator.equipment import Equipment
 
 logger = logging.getLogger("hephaestus.production_line")
@@ -143,20 +144,30 @@ class ProductionLine:
             for key, value in measurements.items():
                 cell.record_measurement(stage, key, value)
 
-        # 3) Probabilistic scrap check
+        # 3) MEASUREMENT-DRIVEN scrap check
+        # Base failure rate is small. Each out-of-spec measurement multiplies it.
+        # Equipment degradation still amplifies the result.
         base_failure = STAGE_FAILURE_RATES.get(stage, 0.005)
-        # Adjusted failure: low quality cells fail more often
-# Adjusted failure: low quality cells fail more often, AND
-        # equipment degradation increases scrap probability
+
+        # Count how many measurements at this stage are outside spec
+        stage_measurements = cell.measurements.get(stage, {})
+        oos = out_of_spec_count(stage, stage_measurements)
+
+        # Lookup-table scrap (matches data generator)
+        # Failures are caused by OOS measurements, period.
+        scrap_table = {0: 0.00, 1: 0.05, 2: 0.40, 3: 0.85}
+        base_scrap = scrap_table.get(oos, 0.95)
+
         equipment_scrap_mult = 1.0
         if equipment_at_stage:
-            # Use the worst equipment's scrap multiplier
             equipment_scrap_mult = max(eq.scrap_multiplier() for eq in equipment_at_stage)
-        adjusted_failure = base_failure * (2.0 - cell.quality_score) * equipment_scrap_mult
+
+        adjusted_failure = min(base_scrap * equipment_scrap_mult, 0.95)
+
         if random.random() < adjusted_failure:
             cell.scrap(stage)
             logger.debug(f"Cell {cell.cell_id} SCRAPPED at {stage} "
-                         f"(quality={cell.quality_score:.3f})")
+                         f"(oos={oos}, p={adjusted_failure:.3f})")
             return True
 
         return False
