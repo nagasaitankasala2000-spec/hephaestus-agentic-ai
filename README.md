@@ -1,185 +1,154 @@
 # HEPHAESTUS
 
-HEPHAESTUS is an event-driven, multi-agent simulation of an EV battery gigafactory.  
-It demonstrates how distributed systems, autonomous agents, and machine learning models operate over a shared event-driven architecture.
+A learning project: a multi-agent simulation of an EV battery gigafactory, built to understand how event-driven systems, autonomous agents, and ML models fit together.
 
-The system combines a factory simulator, operational agents, predictive ML models, and a real-time dashboard.
+I'm a grad student (MS IT Project Management at Indiana Wesleyan), and I built this over many sessions to teach myself things I couldn't learn from coursework: distributed systems, multi-agent coordination, ML integration into operational systems, and full-stack deployment.
 
----
-
-## Live System
-https://hephaestus-agentic-ai-production.up.railway.app
+**Live demo:** https://hephaestus-agentic-ai-production.up.railway.app
 
 ---
 
-## System Design
+## What it is
 
-The system models a manufacturing environment where independent agents react to streaming factory events.
+A simulated battery factory ("TLYB'S Gigafactory") with four agents observing and acting on a live production line:
 
-Core principles:
-- Event-driven architecture
-- Decoupled multi-agent design
-- Shared state coordination
-- ML integrated into operational workflows
-- Real-time observability
+- **Simulator** — 9 stages (Mixing → Coating → Calendering → Slitting → Assembly → Electrolyte Fill → Formation → Aging → Grading), time-compressed so 1 real second ≈ 1 sim hour. Equipment degrades, materials get consumed, cells advance through stages, scrap happens.
+- **FORGE** — An XGBoost model that scores each cell after Formation and flags ones likely to fail QC. AUC 0.90 on the simulator's own distribution.
+- **HERMES** — Procurement agent. Tracks 17 suppliers across 6 materials, auto-reorders when inventory drops below 2 days of coverage, runs a full purchase-order lifecycle.
+- **THEMIS** — Compliance agent. Monitors 12 rules across 3 regulatory frameworks (UN 38.3, IATF 16949, ISO 14001) and opens/resolves findings automatically.
 
----
-
-## Factory Simulation
-
-A 9-stage production pipeline:
-
-Mixing → Coating → Calendering → Slitting → Assembly → Electrolyte Fill → Formation → Aging → Grading
-
-Simulation characteristics:
-- Time-compressed execution (1 sec = 1 hour)
-- Equipment degradation modeling
-- Material consumption and bottlenecks
-- Yield variation and scrap generation
-- Maintenance cycles
+Everything communicates through an event bus. Six-tab dashboard shows it all in real time.
 
 ---
 
-## Agents
+## Why I built it
 
-### FORGE — Quality Risk Model
-Predicts failure probability for cells exiting coating.
+To force myself to learn things by doing them:
 
-- XGBoost classifier
-- 25,000 synthetic samples
-- 14 features
-- 95.18% accuracy | 0.921 AUC
+- How does a pub/sub event bus actually work when you're writing one?
+- What does it feel like to integrate an ML model into a system that's already running?
+- How do you debug a multi-agent system when something goes wrong silently?
+- What's the difference between "demo that works in screenshots" and "system that actually does what it claims"?
 
----
-
-### HERMES — Supply Chain Agent
-Manages procurement and inventory flows.
-
-- 17 suppliers
-- 6 materials
-- Auto-reorder thresholds
-- Purchase order lifecycle tracking
+The third one turned out to be the most valuable lesson.
 
 ---
 
-### THEMIS — Compliance Engine
-Monitors regulatory compliance across the system.
+## Real bugs I found and fixed (the actual learning)
 
-Frameworks:
-- UN 38.3
-- IATF 16949
-- ISO 14001
+**FORGE was secretly broken for weeks.** Predictor expected feature names like `coating_thickness_um`. Simulator emitted `thickness_um`. Predictor silently filled missing names with nominal defaults, scored every cell as "perfect," flagged nothing. The dashboard happily showed "0 cells flagged" and I assumed FORGE was working. It wasn't.
 
-Automatically opens and resolves findings based on system state.
+I found it when I noticed inventory bars looked wrong. Pulled the thread, discovered FORGE had been silently failing the whole time. Fixed it by adding a `SIM_TO_MODEL_KEY` translation map, flattening cell measurements when publishing events, and moving the prediction stage to FORMATION (where all 14 features actually exist).
 
----
+**Sim-clock vs wall-clock confusion.** HERMES was computing PO lifecycle transitions against `event.timestamp`, which was set when the event was constructed (real-world time). But the factory runs on compressed sim-time. So PO transitions needed 4 *real* hours to fire instead of 4 sim-hours. POs got stuck at PLACED forever. Fixed by adding `sim_now_iso` to every event, populated from the factory's sim clock.
 
-### ORACLE — Query Layer
-Lightweight operational query system.
+**Random scrap meant the ML model couldn't learn.** Cells were scrapped based on `random.random() < base_failure × (2 − quality_score)` — essentially random with respect to the features the model could see. I trained models multiple times and got AUC stuck around 0.62. Eventually realized the problem wasn't the model — the data had no learnable signal. Rewrote the simulator to make failure deterministic from out-of-spec measurements (defined in a new `simulator/specs.py`). After that, AUC jumped to 0.90.
 
-- Structured state queries
-- Keyword retrieval
-- Context-aware responses
+**HERMES inventory thresholds were wrong.** Original formula: `consumption_per_cell × 500 × 0.30`. The "500" was meaningless. For low-consumption materials like electrolyte, the threshold was tiny — production would stall before HERMES reordered. Rewrote it to industry-standard days-of-coverage: keep at least 2 days of inventory at target throughput (48,000 cells/day).
+
+Most of these were hidden for weeks. Honestly the most useful skill the project taught me was learning to not trust dashboards.
 
 ---
 
 ## Architecture
 
-Factory Simulator → Event Bus → State Store → FORGE / HERMES / THEMIS → FastAPI → Dashboard
+```
+Simulator (factory.py)
+    │ publishes events
+    ▼
+Event Bus ──► State Store
+    │
+    ├──► FORGE   (scores cells after FORMATION)
+    ├──► HERMES  (reorders materials, runs PO lifecycle)
+    └──► THEMIS  (checks 12 compliance rules)
+                       │
+                       └──► FastAPI ──► Dashboard
+```
+
+All four agents are independent processes that don't directly call each other. They communicate by publishing/subscribing to typed events on a shared bus.
 
 ---
 
 ## Dashboard
 
-Modules:
-- Executive KPIs
-- Operations monitoring
-- Production flow visualization
-- Procurement tracking
-- Compliance monitoring
-- ML insights (FORGE)
+Six tabs:
 
-Stack:
-- Vanilla HTML/CSS/JS
-- Plotly
+- **Executive** — top-level yield, throughput, savings
+- **Operations** — equipment health, throughput chart, cells per stage
+- **Production** — animated SCADA-style view of the 9-stage line
+- **Procurement** — open POs, spend, inventory bars, supplier scorecards
+- **Compliance** — findings, framework deep-dives, rule catalog
+- **FORGE** — model performance, flagged cells, scrap saved
 
----
-
-## Key Engineering Concepts
-
-- Event-driven distributed systems
-- Pub/Sub messaging model
-- Multi-agent coordination
-- Shared state management
-- ML inference pipelines
-- Simulation-based system design
-- REST API architecture
-- Real-time dashboards
+Built with vanilla HTML/CSS/JS and Plotly. No frontend framework. Dark "hacker terminal" aesthetic.
 
 ---
 
-## Scope
+## What this is not
 
-This is a simulation system, not a production industrial platform.
+- Not production software
+- Not a real factory connected to a real ERP
+- Not a benchmark or industry tool
+- Not based on real factory data
 
-Limitations:
+It's a learning artifact. The simulator generates its own synthetic measurements based on published battery research (Tesla 4680 specs, typical process windows), and the ML model learns from that synthetic distribution. It's coherent and self-consistent, but it's not real.
+
+---
+
+## Known limitations
+
+- Read-only dashboard (no buttons to trigger maintenance, place manual POs, etc.)
+- Inventory can theoretically go below zero (simulator doesn't halt MIXING when materials run out)
+- All state is in-memory (lost on restart)
+- No authentication
 - Synthetic data only
-- No ERP/MES integration
-- Simplified physical modeling
-- In-memory state store
 
 ---
 
-## Tech Stack
+## Tech stack
 
-Backend:
-- Python, FastAPI, Uvicorn
-
-ML / Data:
-- Pandas, NumPy
-- Scikit-learn, XGBoost
-
-Frontend:
-- HTML, CSS, JavaScript
-- Plotly
-
-Deployment:
-- Railway
+Python 3.10, FastAPI, Uvicorn, pandas, numpy, scikit-learn, XGBoost, Plotly (CDN), vanilla HTML/CSS/JS, Railway for hosting.
 
 ---
 
-## Running Locally
+## Run locally
 
-git clone https://github.com/nagasaitankasala2000-spec/hephaestus-agentic-ai.git  
-cd hephaestus-agentic-ai  
-pip install -r requirements.txt  
-python app.py  
+```bash
+git clone https://github.com/nagasaitankasala2000-spec/hephaestus-agentic-ai.git
+cd hephaestus-agentic-ai
+pip install -r requirements.txt
+python app.py
+```
 
-App:
-http://localhost:8000
+Open http://localhost:8000
 
-API Docs:
-http://localhost:8000/docs
+To retrain the model:
+
+```bash
+python ml/generate_realistic_training_data.py
+python ml/train_yield_model.py
+```
 
 ---
 
-## Engineering Summary
+## What I learned
 
-Complex industrial behavior is decomposed into:
-- Independent event-driven agents
-- Shared operational state
-- Predictive ML components
-- Observability-first architecture
+- Event-driven architecture clicks once you've actually built one
+- Multi-agent systems are easier than they look if you keep state out of the agents
+- ML in operational systems is mostly about data plumbing, not models
+- Sim-clock and wall-clock are different things and you will confuse them
+- "Working in the demo" and "actually working" are different states
+- Most of the useful debugging time is spent asking "is this number real?"
 
 ---
 
 ## Author
 
-Naga Sai Tankasala  
-MS Information Technology (Project Management) — Indiana Wesleyan University  
-MS Business Analytics — Sacred Heart University  
-B.Tech Mechanical Engineering  
-Connecticut, USA  
+Naga Sai Tankasala
+MS IT Project Management — Indiana Wesleyan University (in progress)
+MS Business Analytics — Sacred Heart University
+B.Tech Mechanical Engineering
+Connecticut, USA
 
 ---
 
